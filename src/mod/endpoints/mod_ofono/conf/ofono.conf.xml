@@ -1,0 +1,32 @@
+<configuration name="ofono.conf" description="Ofono Configuration">
+  <global_settings>
+    <param name="debug" value="8"/>
+    <param name="dialplan" value="XML"/>
+    <param name="context" value="context_1"/>
+    <param name="destination" value="12321"/>
+  </global_settings>
+  <!-- one entry here per gsmopen interface -->
+  <per_interface_settings>
+    <interface id="1" name="interface1">
+	<param name="dialplan" value="XML"/>
+	<param name="context" value="context_1"/>
+    <param name="destination" value="12321"/>
+    <param name="alsacname" value="plughw:2,1,0"/>
+    <param name="alsapname" value="plughw:2,1,1"/>
+    <param name="alsa_sound_rate" value="8000"/>
+    <param name="alsa_period_size" value="160"/>
+    <param name="alsa_periods_in_buffer" value="3"/>
+    <param name="alsa_capture_is_mono" value="1"/>
+    <param name="alsa_play_is_mono" value="1"/>
+    <param name="capture_boost" value="20"/>
+    <param name="playback_boost" value="0"/>
+    <param name="early_audio" value="0"/>
+    <param name="ofono_modem_name" value="/huawei_0"/>
+    <param name="no_alsa_sound" value="1"/>
+    <param name="huawei_audio" value="1"/>
+    <param name="huawei_serial_path" value="/dev/ttyUSB1"/>
+    </interface>
+    <!-- following interfaces are commented out!
+    -->
+  </per_interface_settings>
+</configuration>
