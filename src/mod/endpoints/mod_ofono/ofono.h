@@ -365,6 +365,7 @@ struct private_object {
 	/* Ofono modem data */
 	char *ofono_modem_name;
 	char *ofono_modem_operator_name;
+	char *ofono_modem_imsi;
 	int ofono_modem_signal_strength;
 
 	char *dbus_path;

@@ -56,6 +56,8 @@ static void ofono_disconnect(DBusConnection *conn, void *user_data);
 static void ofono_disconnect_callback(DBusConnection *conn, void *user_data);
 static int ofono_get_network_info(private_t *tech_pvt);
 static void ofono_get_network_info_reply(DBusPendingCall *call, void *user_data);
+static int ofono_get_sim_info(private_t *tech_pvt);
+static void ofono_get_sim_info_reply(DBusPendingCall *call, void *user_data);
 static gboolean ofono_signal_call_state(DBusConnection *conn, DBusMessage *msg,
 		void *user_data);
 static gboolean ofono_signal_call_added(DBusConnection *conn, DBusMessage *msg,
@@ -85,6 +87,7 @@ static gboolean ofono_signal_audio_status(DBusConnection *conn,
 #define OFONO_SUPPLEMENTARY_INTERFACE	OFONO_SERVICE ".SupplementaryServices"
 #define OFONO_MESSAGEMANAGER_INTERFACE	OFONO_SERVICE ".MessageManager"
 #define OFONO_NETWORK_INTERFACE			OFONO_SERVICE ".NetworkRegistration"
+#define OFONO_SIM_INTERFACE				OFONO_SERVICE ".SimManager"
 
 extern int running;
 int ofono_dir_entry_extension = 1;
@@ -476,6 +479,8 @@ int ofono_shutdown_dbus(private_t * tech_pvt) {
 	g_free(tech_pvt->sms_body);
 	g_free(tech_pvt->sms_sender);
 	g_free(tech_pvt->sms_date);
+	g_free(tech_pvt->ofono_modem_operator_name);
+	g_free(tech_pvt->ofono_modem_imsi);
 	tech_pvt->dbus_main_context = NULL;
 	tech_pvt->dbus_main_loop = NULL;
 	tech_pvt->dbus_conn = NULL;
@@ -484,6 +489,8 @@ int ofono_shutdown_dbus(private_t * tech_pvt) {
 	tech_pvt->sms_body = NULL;
 	tech_pvt->sms_sender = NULL;
 	tech_pvt->sms_date = NULL;
+	tech_pvt->ofono_modem_operator_name = NULL;
+	tech_pvt->ofono_modem_imsi = NULL;
 
 	tech_pvt->dbus_modem_state_online = 0;
 	switch_sleep(1000000);
@@ -593,15 +600,40 @@ int ofono_config_dbus_init(private_t * tech_pvt) {
 				ERRORA("Setting modem powered failed! Couldn't send message\n",
 						OFONO_P_LOG);
 				dbus_message_unref(msg);
-			}
+			} else {
+				int i;
 
-			dbus_message_unref(msg);
+				dbus_message_unref(msg);
+
+				/* IMSI should be known before setting modem to online state */
+				for (i = 0; i < 5; i++) {
+					switch_sleep(1000000);
+					ofono_get_sim_info(tech_pvt);
+					switch_sleep(100000);
+					ofono_dbus_context_iter(tech_pvt);
+					switch_sleep(100000);
+					ofono_dbus_context_iter(tech_pvt);
+					if (tech_pvt->ofono_modem_imsi != NULL) {
+						break;
+					}
+				}
+			}
 		}
+	} else {
+		ofono_get_sim_info(tech_pvt);
+		switch_sleep(100000);
+		ofono_dbus_context_iter(tech_pvt);
+		switch_sleep(100000);
+		ofono_dbus_context_iter(tech_pvt);
 	}
 
 	tech_pvt->ofono_modem_signal_strength = -1;
-	if (tech_pvt->dbus_modem_state_online == 1) {
-		ofono_get_network_info(tech_pvt);
+
+	if (tech_pvt->ofono_modem_imsi == NULL) {
+		WARNINGA(
+				"WARNING: IMSI of the SIM is not known. \
+				Setting modem to online state might result into an error!\n",
+				OFONO_P_LOG);
 	}
 
 	if (tech_pvt->dbus_modem_state_online == 0) {
@@ -639,8 +671,13 @@ int ofono_config_dbus_init(private_t * tech_pvt) {
 
 			dbus_message_unref(msg);
 		}
+	} else {
+		ofono_get_network_info(tech_pvt);
 	}
 
+	switch_sleep(100000);
+	ofono_dbus_context_iter(tech_pvt);
+	switch_sleep(100000);
 	ofono_dbus_context_iter(tech_pvt);
 
 	if (tech_pvt->dbus_modem_state_powered == 0
@@ -653,8 +690,8 @@ int ofono_config_dbus_init(private_t * tech_pvt) {
 	}
 
 	/* If this function is called due to a D-BUS disconnect signal,
-	   we might have missed a hang-up and have an active call in Ofono.
-	   Making sure that there are no active calls costing money.. */
+	 we might have missed a hang-up and have an active call in Ofono.
+	 Making sure that there are no active calls costing money.. */
 	if (!strlen(tech_pvt->session_uuid_str)) {
 		ofono_hangup(tech_pvt);
 	}
@@ -940,6 +977,98 @@ static int ofono_get_network_info(private_t *tech_pvt) {
 		return -EINVAL;
 
 	dbus_pending_call_set_notify(call, ofono_get_network_info_reply, tech_pvt,
+			NULL);
+
+	dbus_pending_call_unref(call);
+
+	return 0;
+}
+
+/* A callback function, which catches the D-BUS reply for information about
+ * the SIM properties.
+ */
+static void ofono_get_sim_info_reply(DBusPendingCall *call, void *user_data) {
+
+	private_t *tech_pvt = (private_t *) user_data;
+	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+	DBusMessageIter iter, dict;
+	DBusError err;
+	const char *key;
+
+	dbus_error_init(&err);
+
+	if (dbus_set_error_from_message(&err, reply) == TRUE) {
+		ERRORA("%s: %s\n", OFONO_P_LOG, err.name, err.message);
+		dbus_error_free(&err);
+		goto done;
+	}
+	if (dbus_message_has_signature(reply, "a{sv}") == FALSE) {
+		ERRORA("dbus_message_has_signature == FALSE\n", OFONO_P_LOG);
+		goto done;
+	}
+	if (dbus_message_iter_init(reply, &iter) == FALSE) {
+		ERRORA("dbus_message_iter_init == FALSE\n", OFONO_P_LOG);
+		goto done;
+	}
+
+	dbus_message_iter_recurse(&iter, &dict);
+
+	while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+
+		DBusMessageIter value, entry;
+
+		dbus_message_iter_recurse(&dict, &entry);
+		dbus_message_iter_get_basic(&entry, &key);
+
+		dbus_message_iter_next(&entry);
+		dbus_message_iter_recurse(&entry, &value);
+
+		if (g_str_equal(key, "Present") == TRUE) {
+			dbus_bool_t status;
+			dbus_message_iter_get_basic(&value, &status);
+			if (status == FALSE)
+				ERRORA("ERROR: SIM card not present\n", OFONO_P_LOG);
+		}
+
+		if (g_str_equal(key, "SubscriberIdentity") == TRUE) {
+			const char *status;
+			dbus_message_iter_get_basic(&value, &status);
+			tech_pvt->ofono_modem_imsi = g_strdup(status);
+		}
+
+		dbus_message_iter_next(&dict);
+	}
+
+	done: dbus_message_unref(reply);
+}
+
+/* Sends a new D-BUS message, which asks for information about the SIM
+ * properties.
+ */
+static int ofono_get_sim_info(private_t *tech_pvt) {
+
+	DBusMessage *msg;
+	DBusPendingCall *call;
+
+	msg = dbus_message_new_method_call(OFONO_SERVICE,
+			tech_pvt->ofono_modem_name, OFONO_SIM_INTERFACE, "GetProperties");
+	if (msg == NULL)
+		return -ENOMEM;
+
+	dbus_message_set_auto_start(msg, FALSE);
+
+	if (dbus_connection_send_with_reply(tech_pvt->dbus_conn, msg, &call, -1)
+			== FALSE) {
+		dbus_message_unref(msg);
+		return -EIO;
+	}
+
+	dbus_message_unref(msg);
+
+	if (call == NULL)
+		return -EINVAL;
+
+	dbus_pending_call_set_notify(call, ofono_get_sim_info_reply, tech_pvt,
 			NULL);
 
 	dbus_pending_call_unref(call);
@@ -1972,7 +2101,7 @@ static gboolean ofono_signal_call_state(DBusConnection *conn, DBusMessage *msg,
 			tech_pvt->interface_state = OFONO_STATE_RING;
 		} else if (g_str_equal(property_status, "waiting")) {
 			/*tech_pvt->phone_callflow = CALLFLOW_CALL_LINEBUSY;
-			tech_pvt->interface_state = OFONO_STATE_DOWN;*/
+			 tech_pvt->interface_state = OFONO_STATE_DOWN;*/
 			return TRUE;
 		} else if (g_str_equal(property_status, "disconnected")) {
 			session = switch_core_session_locate(tech_pvt->session_uuid_str);

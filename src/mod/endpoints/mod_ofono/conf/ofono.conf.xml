@@ -5,7 +5,7 @@
     <param name="context" value="context_1"/>
     <param name="destination" value="12321"/>
   </global_settings>
-  <!-- one entry here per gsmopen interface -->
+  <!-- one entry here per ofono interface -->
   <per_interface_settings>
     <interface id="1" name="interface1">
 	<param name="dialplan" value="XML"/>
