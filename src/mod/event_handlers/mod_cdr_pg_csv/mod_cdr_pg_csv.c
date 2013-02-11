@@ -1,6 +1,6 @@
 /*
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -25,7 +25,7 @@
  *
  * Contributor(s):
  * Michal Bielicki <michal.bielicki@halokwadrat.de>
- * Daniel Swarbrick <daniel.swarbrick@seventhsignal.de>
+ * Daniel Swarbrick <daniel.swarbrick@gmail.com>
  * Evgeney Bugorov <evgeney.bugrov@halokwadrat.ru>
  * Sponsored by Halo Kwadrat Sp. z o.o. & Seventh Signal Ltd. & CO. KG
  *

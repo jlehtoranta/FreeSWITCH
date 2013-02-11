@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -70,6 +70,7 @@ struct vmivr_profile {
 	const char *api_msg_get;
 	const char *api_msg_forward;
 	const char *api_pref_greeting_set;
+	const char *api_pref_greeting_get;
 	const char *api_pref_recname_set;
 	const char *api_pref_password_set;
 

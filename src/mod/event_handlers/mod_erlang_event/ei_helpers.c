@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -304,6 +304,11 @@ int ei_decode_string_or_binary(char *buf, int *index, int maxlen, char *dst)
 	long len;
 
 	ei_get_type(buf, index, &type, &size);
+
+	if (type == ERL_NIL_EXT || size == 0) {
+		dst[0] = '\0';
+		return 0;
+	}
 
 	if (type != ERL_STRING_EXT && type != ERL_BINARY_EXT) {
 		return -1;

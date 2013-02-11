@@ -1,6 +1,6 @@
 /* 
  * libDingaLing XMPP Jingle Library
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -42,7 +42,7 @@ extern "C" {
 
 
 #ifdef _MSC_VER
-#ifndef uint32_t
+#if !defined(_STDINT) && !defined(uint32_t)
 typedef unsigned __int8		uint8_t;
 typedef unsigned __int16	uint16_t;
 typedef unsigned __int32	uint32_t;

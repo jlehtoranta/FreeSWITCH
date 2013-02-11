@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -42,7 +42,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_perform_file_open(const char *file, 
 															  uint8_t channels, uint32_t rate, unsigned int flags, switch_memory_pool_t *pool)
 {
 	char *ext;
-	switch_status_t status;
+	switch_status_t status = SWITCH_STATUS_FALSE;
 	char stream_name[128] = "";
 	char *rhs = NULL;
 	const char *spool_path = NULL;
@@ -76,6 +76,11 @@ SWITCH_DECLARE(switch_status_t) switch_core_perform_file_open(const char *file, 
 		switch_set_flag(fh, SWITCH_FILE_FLAG_FREE_POOL);
 	}
 
+	if (switch_directory_exists(file_path, fh->memory_pool) == SWITCH_STATUS_SUCCESS) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "File [%s] is a directory not a file.\n", file_path);
+		status = SWITCH_STATUS_GENERR;
+		goto fail;
+	}
 
 	if ((rhs = strstr(file_path, SWITCH_URL_SEPARATOR))) {
 		switch_copy_string(stream_name, file_path, (rhs + 1) - file_path);
@@ -197,6 +202,8 @@ SWITCH_DECLARE(switch_status_t) switch_core_perform_file_open(const char *file, 
 	return status;
 
   fail:
+
+	switch_clear_flag(fh, SWITCH_FILE_OPEN);
 
 	if (switch_test_flag(fh, SWITCH_FILE_FLAG_FREE_POOL)) {
 		switch_core_destroy_memory_pool(&fh->memory_pool);
@@ -404,6 +411,23 @@ SWITCH_DECLARE(switch_status_t) switch_core_file_write(switch_file_handle_t *fh,
 		}
 		return status;
 	}
+}
+
+SWITCH_DECLARE(switch_status_t) switch_core_file_write_video(switch_file_handle_t *fh, void *data, switch_size_t *len)
+{
+	switch_assert(fh != NULL);
+	switch_assert(fh->file_interface != NULL);
+
+	if (!switch_test_flag(fh, SWITCH_FILE_OPEN)) {
+		return SWITCH_STATUS_GENERR;
+	}
+
+	if (!fh->file_interface->file_write_video) {
+		return SWITCH_STATUS_FALSE;
+	}
+
+	return fh->file_interface->file_write_video(fh, data, len);
+
 }
 
 SWITCH_DECLARE(switch_status_t) switch_core_file_seek(switch_file_handle_t *fh, unsigned int *cur_pos, int64_t samples, int whence)

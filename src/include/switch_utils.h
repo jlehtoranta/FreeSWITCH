@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -40,8 +40,175 @@
 
 #include <switch.h>
 
-SWITCH_BEGIN_EXTERN_C SWITCH_DECLARE(int) switch_toupper(int c);
-SWITCH_DECLARE(int) switch_tolower(int c);
+SWITCH_BEGIN_EXTERN_C 
+
+/* https://code.google.com/p/stringencoders/wiki/PerformanceAscii 
+   http://www.azillionmonkeys.com/qed/asmexample.html
+*/
+static inline uint32_t switch_toupper(uint32_t eax)
+{
+uint32_t ebx = (0x7f7f7f7ful & eax) + 0x05050505ul;
+ebx = (0x7f7f7f7ful & ebx) + 0x1a1a1a1aul;
+ ebx = ((ebx & ~eax) >> 2 ) & 0x20202020ul;
+ return eax - ebx;
+}
+
+/* https://code.google.com/p/stringencoders/wiki/PerformanceAscii 
+   http://www.azillionmonkeys.com/qed/asmexample.html
+*/
+static inline uint32_t switch_tolower(uint32_t eax)
+{
+	uint32_t ebx = (0x7f7f7f7ful & eax) + 0x25252525ul;
+	ebx = (0x7f7f7f7ful & ebx) + 0x1a1a1a1aul;
+	ebx = ((ebx & ~eax) >> 2)  & 0x20202020ul;
+	return eax + ebx;
+}
+
+
+#ifdef FS_64BIT
+
+/* https://code.google.com/p/stringencoders/wiki/PerformanceAscii 
+   http://www.azillionmonkeys.com/qed/asmexample.html
+*/
+static inline uint64_t switch_toupper64(uint64_t eax)
+{
+uint64_t ebx = (0x7f7f7f7f7f7f7f7full & eax) + 0x0505050505050505ull;
+ ebx = (0x7f7f7f7f7f7f7f7full & ebx) + 0x1a1a1a1a1a1a1a1aull;
+ ebx = ((ebx & ~eax) >> 2 ) & 0x2020202020202020ull;
+ return eax - ebx;
+}
+
+/* https://code.google.com/p/stringencoders/wiki/PerformanceAscii 
+   http://www.azillionmonkeys.com/qed/asmexample.html
+*/
+static inline uint64_t switch_tolower64(uint64_t eax)
+{
+	uint64_t ebx = (0x7f7f7f7f7f7f7f7full & eax) + 0x2525252525252525ull;
+	ebx = (0x7f7f7f7f7f7f7f7full & ebx) + 0x1a1a1a1a1a1a1a1aull;
+	ebx = ((ebx & ~eax) >> 2)  & 0x2020202020202020ull;
+	return eax + ebx;
+}
+
+static inline void switch_toupper_max(char *s)
+{
+	uint64_t *b,*p;
+	char *c;
+	size_t l;
+
+	l = strlen(s);
+
+	p = (uint64_t *) s;
+
+	while (l > 8) {
+		b = p;
+		*b = (uint64_t) switch_toupper64(*b);
+		b++;
+		p++;
+		l -= 8;
+	}
+
+	c = (char *)p;
+
+	while(l > 0) {
+		*c = (char) switch_toupper(*c);
+		c++;
+		l--;
+	}
+
+}
+
+static inline void switch_tolower_max(char *s)
+{
+	uint64_t *b,*p;
+	char *c;
+	size_t l;
+
+	l = strlen(s);
+
+	p = (uint64_t *) s;
+
+	while (l > 8) {
+		b = p;
+		*b = (uint64_t) switch_tolower64(*b);
+		b++;
+		p++;
+		l -= 8;
+	}
+
+	c = (char *)p;
+
+	while(l > 0) {
+		*c = (char) switch_tolower(*c);
+		c++;
+		l--;
+	}
+
+}
+
+#else 
+
+static inline void switch_toupper_max(char *s)
+{
+	uint32_t *b,*p;
+	char *c;
+	size_t l;
+
+	l = strlen(s);
+
+	p = (uint32_t *) s;
+
+	while (l > 4) {
+		b = p;
+		*b = (uint32_t) switch_toupper(*b);
+		b++;
+		p++;
+		l -= 4;
+	}
+
+	c = (char *)p;
+
+	while(l > 0) {
+		*c = (char) switch_toupper(*c);
+		c++;
+		l--;
+	}
+	
+}
+
+static inline void switch_tolower_max(char *s)
+{
+	uint32_t *b,*p;
+	char *c;
+	size_t l;
+
+	l = strlen(s);
+
+	p = (uint32_t *) s;
+
+	while (l > 4) {
+		b = p;
+		*b = (uint32_t) switch_tolower(*b);
+		b++;
+		p++;
+		l -= 4;
+	}
+
+	c = (char *)p;
+
+	while(l > 0) {
+		*c = (char) switch_tolower(*c);
+		c++;
+		l--;
+	}
+	
+}
+#endif
+
+
+
+
+SWITCH_DECLARE(int) old_switch_toupper(int c);
+SWITCH_DECLARE(int) old_switch_tolower(int c);
 SWITCH_DECLARE(int) switch_isalnum(int c);
 SWITCH_DECLARE(int) switch_isalpha(int c);
 SWITCH_DECLARE(int) switch_iscntrl(int c);
@@ -234,7 +401,8 @@ static inline uint32_t switch_known_bitrate(switch_payload_t payload)
 }
 
 SWITCH_DECLARE(switch_size_t) switch_fd_read_line(int fd, char *buf, switch_size_t len);
-
+SWITCH_DECLARE(switch_size_t) switch_fd_read_dline(int fd, char **buf, switch_size_t *len);
+SWITCH_DECLARE(switch_size_t) switch_fp_read_dline(FILE *fd, char **buf, switch_size_t *len);
 
 SWITCH_DECLARE(switch_status_t) switch_frame_alloc(switch_frame_t **frame, switch_size_t size);
 SWITCH_DECLARE(switch_status_t) switch_frame_dup(switch_frame_t *orig, switch_frame_t **clone);
@@ -836,6 +1004,16 @@ SWITCH_DECLARE(char *) switch_format_number(const char *num);
 
 SWITCH_DECLARE(unsigned int) switch_atoui(const char *nptr);
 SWITCH_DECLARE(unsigned long) switch_atoul(const char *nptr);
+
+/**
+ * Portable version of strerror_r(), work around for the incompatible
+ * return type of GNU and XSI variants.
+ * \param[in]	errnum	Error number
+ * \param[both]	buf	Buffer for error message
+ * \param[in]	buflen	Size of message buffer
+ * \return	Pointer to message buffer, returning error message or "Unknown error xxx" if none found
+ */
+SWITCH_DECLARE(char *) switch_strerror_r(int errnum, char *buf, switch_size_t buflen);
 
 SWITCH_END_EXTERN_C
 #endif

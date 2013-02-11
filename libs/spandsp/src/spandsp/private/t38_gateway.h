@@ -28,6 +28,13 @@
 #if !defined(_SPANDSP_PRIVATE_T38_GATEWAY_H_)
 #define _SPANDSP_PRIVATE_T38_GATEWAY_H_
 
+/*! The number of HDLC transmit buffers */
+#define T38_TX_HDLC_BUFS        256
+/*! The maximum length of an HDLC frame buffer. This must be big enough for ECM frames. */
+#define T38_MAX_HDLC_LEN        260
+/*! The receive buffer length */
+#define T38_RX_BUF_LEN          2048
+
 /*!
     T.38 gateway T.38 side channel descriptor.
 */
@@ -59,10 +66,6 @@ typedef struct
 {
     /*! \brief The FAX modem set for the audio side fo the gateway. */
     fax_modems_state_t modems;
-    /*! \brief The current receive signal handler. Actual receiving hops between this
-               and a dummy receive routine. */
-    span_rx_handler_t *base_rx_handler;
-    span_rx_fillin_handler_t *base_rx_fillin_handler;
 } t38_gateway_audio_state_t;
 
 /*!
@@ -75,9 +78,9 @@ typedef struct
     /*! \brief Current pointer into the data buffer. */
     int data_ptr;
     /*! \brief The current octet being received as non-ECM data. */
-    unsigned int bit_stream;
+    uint16_t bit_stream;
     /*! \brief The number of bits taken from the modem for the current scan row. This
-               is used during non-ECM transmission will fill bit removal to see that
+               is used during non-ECM transmission with fill bit removal to see that
                T.38 packet transmissions do not stretch too far apart. */
     int bits_absorbed;
     /*! \brief The current bit number in the current non-ECM octet. */
@@ -86,13 +89,13 @@ typedef struct
     uint16_t crc;
     /*! \brief TRUE if non-ECM fill bits are to be stripped when sending image data. */
     int fill_bit_removal;
-    /*! \brief The number of octets to send in each image packet (non-ECM or ECM) at the current
-               rate and the current specified packet interval. */
+    /*! \brief The number of octets to send in each image packet (non-ECM or ECM) at
+               the current rate and the current specified packet interval. */
     int octets_per_data_packet;
 
-    /*! \brief Bits into the non-ECM buffer */
+    /*! \brief The number of bits into the non-ECM buffer */
     int in_bits;
-    /*! \brief Octets fed out from the non-ECM buffer */
+    /*! \brief The number of octets fed out from the non-ECM buffer */
     int out_octets;
 } t38_gateway_to_t38_state_t;
 
@@ -104,11 +107,11 @@ typedef struct
     /*! \brief HDLC message buffers. */
     uint8_t buf[T38_MAX_HDLC_LEN];
     /*! \brief HDLC message lengths. */
-    int len;
+    int16_t len;
     /*! \brief HDLC message status flags. */
-    int flags;
+    uint16_t flags;
     /*! \brief HDLC buffer contents. */
-    int contents;
+    int16_t contents;
 } t38_gateway_hdlc_buf_t;
 
 /*!
@@ -118,16 +121,6 @@ typedef struct
 {
     /*! \brief HDLC message buffers. */
     t38_gateway_hdlc_buf_t buf[T38_TX_HDLC_BUFS];
-#if 0
-    /*! \brief HDLC message buffers. */
-    uint8_t buf[T38_TX_HDLC_BUFS][T38_MAX_HDLC_LEN];
-    /*! \brief HDLC message lengths. */
-    int len[T38_TX_HDLC_BUFS];
-    /*! \brief HDLC message status flags. */
-    int flags[T38_TX_HDLC_BUFS];
-    /*! \brief HDLC buffer contents. */
-    int contents[T38_TX_HDLC_BUFS];
-#endif
     /*! \brief HDLC buffer number for input. */
     int in;
     /*! \brief HDLC buffer number for output. */
@@ -183,7 +176,7 @@ typedef struct
 
     /*! \brief A pointer to a callback routine to be called when frames are
         exchanged. */
-    t38_gateway_real_time_frame_handler_t *real_time_frame_handler;
+    t38_gateway_real_time_frame_handler_t real_time_frame_handler;
     /*! \brief An opaque pointer supplied in real time frame callbacks. */
     void *real_time_frame_user_data;
 } t38_gateway_core_state_t;

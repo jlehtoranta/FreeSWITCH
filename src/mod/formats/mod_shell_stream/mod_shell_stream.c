@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -108,7 +108,7 @@ static switch_status_t shell_stream_file_open(switch_file_handle_t *handle, cons
 	if (pipe(context->fds)) {
 		goto error;
 	} else {					/* good to go */
-		context->pid = fork();
+		context->pid = switch_fork();
 
 		if (context->pid < 0) {	/* ok maybe not */
 			goto error;

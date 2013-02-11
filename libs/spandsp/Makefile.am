@@ -16,6 +16,8 @@
 ## License along with this program; if not, write to the Free Software
 ## Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
+ACLOCAL_AMFLAGS = -I m4
+
 AM_CFLAGS = $(COMP_VENDOR_CFLAGS)
 AM_LDFLAGS = $(COMP_VENDOR_LDFLAGS)
 
@@ -50,14 +52,10 @@ EXTRA_DIST = autogen.sh \
 if COND_DOC
     MAYBE_DOC=doc
 endif
-if COND_TESTDATA
-    MAYBE_TESTDATA=test-data
-endif
 if COND_TESTS
-    MAYBE_TESTDATA=test-data
-    MAYBE_TESTS=spandsp-sim tests
+    MAYBE_TESTS=spandsp-sim test-data tests
 endif
-SUBDIRS = src $(MAYBE_DOC) $(MAYBE_TESTDATA) $(MAYBE_TESTS)
+SUBDIRS = src $(MAYBE_DOC) $(MAYBE_TESTS)
 
 DIST_SUBDIRS = src doc test-data spandsp-sim tests
 

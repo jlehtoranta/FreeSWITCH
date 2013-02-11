@@ -62,7 +62,7 @@ static __inline__ int flag_is_changeable_p(uint32_t flag)
     uint32_t f1;
     uint32_t f2;
 
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         " pushfl\n"
         " pushfl\n"
         " popl %0\n"
@@ -92,9 +92,9 @@ int has_MMX(void)
     int result;
 
     if (!have_cpuid_p())
-        return  0;
+        return 0;
     /*endif*/
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         " push  %%ebx;\n"
 	" mov	$1,%%eax;\n"
 	" cpuid;\n"
@@ -107,7 +107,7 @@ int has_MMX(void)
 	: "=a" (result)
         : 
         : "ecx", "edx");
-    return  result;
+    return result;
 }
 /*- End of function --------------------------------------------------------*/
         
@@ -116,9 +116,9 @@ int has_SIMD(void)
     int result;
 
     if (!have_cpuid_p())
-        return  0;
+        return 0;
     /*endif*/
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         " push  %%ebx;\n"
 	" mov	$1,%%eax;\n"
 	" cpuid;\n"
@@ -131,7 +131,7 @@ int has_SIMD(void)
 	: "=a" (result)
         : 
         : "ecx", "edx");
-    return  result;
+    return result;
 }
 /*- End of function --------------------------------------------------------*/
 
@@ -140,9 +140,9 @@ int has_SIMD2(void)
     int result;
 
     if (!have_cpuid_p())
-        return  0;
+        return 0;
     /*endif*/
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         " push  %%ebx;\n"
 	" mov	$1,%%eax;\n"
 	" cpuid;\n"
@@ -155,7 +155,7 @@ int has_SIMD2(void)
 	: "=a" (result)
         : 
         : "ecx", "edx");
-    return  result;
+    return result;
 }
 /*- End of function --------------------------------------------------------*/
         
@@ -164,9 +164,9 @@ int has_3DNow(void)
     int result;
 
     if (!have_cpuid_p())
-        return  0;
+        return 0;
     /*endif*/
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         " push  %%ebx;\n"
 	" mov	$0x80000000,%%eax;\n"
 	" cpuid;\n"
@@ -184,7 +184,7 @@ int has_3DNow(void)
 	: "=c" (result)
         : 
         : "eax", "edx");
-    return  result;
+    return result;
 }
 /*- End of function --------------------------------------------------------*/
 
@@ -201,7 +201,7 @@ int main(int argc, char *argv[])
     printf("SIMD2 is %x\n", result);
     result = has_3DNow();
     printf("3DNow is %x\n", result);
-    return  0;
+    return 0;
 }
 /*- End of function --------------------------------------------------------*/
 #endif

@@ -75,7 +75,12 @@ enum
     /*! \brief CED tone is the same as ANS tone. FAX preamble in a string of V.21 HDLC flag octets.
                This is only valid as a tone type to receive. It is never reported as a detected tone
                type. The report will either be for FAX preamble or CED/ANS tone. */
-    MODEM_CONNECT_TONES_FAX_CED_OR_PREAMBLE = 7
+    MODEM_CONNECT_TONES_FAX_CED_OR_PREAMBLE = 7,
+    /*! \brief Bell ANS tone is a pure continuous 2225Hz+-15Hz tone for 3.3s+-0.7s. */
+    MODEM_CONNECT_TONES_BELL_ANS = 8,
+    /*! \brief Calling tone is a pure 1300Hz tone, in 0.6s bursts, with 2s silences in between. The
+               bursts repeat for as long as is required. */
+    MODEM_CONNECT_TONES_CALLING_TONE = 9
 };
 
 /*! \brief FAX CED tone is the same as ANS tone. */
@@ -136,7 +141,16 @@ SPAN_DECLARE_NONSTD(int) modem_connect_tones_tx(modem_connect_tones_tx_state_t *
 SPAN_DECLARE_NONSTD(int) modem_connect_tones_rx(modem_connect_tones_rx_state_t *s,
                                                 const int16_t amp[],
                                                 int len);
-                             
+
+/*! Fake processing of a missing block of received modem connect tone samples
+    (e.g due to packet loss).
+    \brief Fake processing of a missing block of received modem connect tone samples.
+    \param s The context.
+    \param len The number of samples to fake.
+    \return The number of samples unprocessed.
+*/
+SPAN_DECLARE_NONSTD(int) modem_connect_tones_rx_fillin(modem_connect_tones_rx_state_t *s, int len);
+
 /*! \brief Test if a modem_connect tone has been detected.
     \param s The context.
     \return TRUE if tone is detected, else FALSE.

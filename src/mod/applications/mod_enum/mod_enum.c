@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -24,6 +24,7 @@
  * Contributor(s):
  * 
  * Anthony Minessale II <anthm@freeswitch.org>
+ * Jay Binks <jaybinks@gmail.com>
  *
  * mod_enum.c -- ENUM
  *
@@ -34,6 +35,8 @@
 #define ssize_t int
 #endif
 #include <ldns/ldns.h>
+
+#define ENUM_MAXNAMESERVERS	10	/* max nameservers that will be used */
 
 SWITCH_MODULE_LOAD_FUNCTION(mod_enum_load);
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_enum_shutdown);
@@ -64,7 +67,6 @@ static switch_event_node_t *NODE = NULL;
 
 static struct {
 	char *root;
-	char *server;
 	char *isn_root;
 	enum_route_t *route_order;
 	switch_memory_pool_t *pool;
@@ -72,10 +74,10 @@ static struct {
 	int timeout;
 	int retries;
 	int random;
+	char *nameserver[ENUM_MAXNAMESERVERS];
 } globals;
 
 SWITCH_DECLARE_GLOBAL_STRING_FUNC(set_global_root, globals.root);
-SWITCH_DECLARE_GLOBAL_STRING_FUNC(set_global_server, globals.server);
 SWITCH_DECLARE_GLOBAL_STRING_FUNC(set_global_isn_root, globals.isn_root);
 
 static void add_route(char *service, char *regex, char *replace)
@@ -102,6 +104,7 @@ static void add_route(char *service, char *regex, char *replace)
 static switch_status_t load_config(void)
 {
 	char *cf = "enum.conf";
+	int inameserver = 0;
 	switch_xml_t cfg, xml = NULL, param, settings, route, routes;
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
 
@@ -121,8 +124,6 @@ static switch_status_t load_config(void)
 			const char *val = switch_xml_attr_soft(param, "value");
 			if (!strcasecmp(var, "default-root")) {
 				set_global_root(val);
-			} else if (!strcasecmp(var, "use-server")) {
-				set_global_server(val);
 			} else if (!strcasecmp(var, "auto-reload")) {
 				globals.auto_reload = switch_true(val);
 			} else if (!strcasecmp(var, "query-timeout")) {
@@ -135,6 +136,11 @@ static switch_status_t load_config(void)
 				globals.random = switch_true(val);
 			} else if (!strcasecmp(var, "default-isn-root")) {
 				set_global_isn_root(val);
+			} else if (!strcasecmp(var, "nameserver") || !strcasecmp(var, "use-server")) {
+				if ( inameserver < ENUM_MAXNAMESERVERS ) {
+					globals.nameserver[inameserver] = (char *) val;
+					inameserver++;
+				}
 			} else if (!strcasecmp(var, "log-level-trace")) {
 
 			}
@@ -157,7 +163,7 @@ static switch_status_t load_config(void)
 
   done:
 #ifdef _MSC_VER
-	if (!globals.server) {
+	if (!globals.nameserver[0]) {
 		HKEY hKey;
 		DWORD data_sz;
 		char* buf;
@@ -177,7 +183,7 @@ static switch_status_t load_config(void)
 					buf[data_sz] = 0;
 				}
 				switch_replace_char(buf, ' ', 0, SWITCH_FALSE); /* only use the first entry ex "192.168.1.1 192.168.1.2" */
-				globals.server = buf;
+				globals.nameserver[0] = buf;
 			}
 		}
 	}
@@ -442,8 +448,7 @@ static void parse_naptr(const ldns_rr *naptr, const char *number, enum_record_t 
 	return;
 }
 
-
-switch_status_t ldns_lookup(const char *number, const char *root, const char *server_name, enum_record_t **results)
+switch_status_t ldns_lookup(const char *number, const char *root, char *server_name[ENUM_MAXNAMESERVERS] , enum_record_t **results)
 {
 	ldns_resolver *res = NULL;
 	ldns_rdf *domain = NULL;
@@ -454,6 +459,8 @@ switch_status_t ldns_lookup(const char *number, const char *root, const char *se
 	switch_status_t status = SWITCH_STATUS_FALSE;
 	char *name = NULL;
 	struct timeval to = { 0, 0};
+	int inameserver = 0;
+	int added_server = 0;
 
 	if (!(name = reverse_number(number, root))) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Parse Error!\n");
@@ -463,16 +470,24 @@ switch_status_t ldns_lookup(const char *number, const char *root, const char *se
 	if (!(domain = ldns_dname_new_frm_str(name))) {
 		goto end;
 	}
-
-	if (!zstr(server_name)) {
+	
+	if (server_name) {
 		res = ldns_resolver_new();
 		switch_assert(res);
 		
-		if ((serv_rdf = ldns_rdf_new_addr_frm_str(server_name))) {
-			s = ldns_resolver_push_nameserver(res, serv_rdf);
-			ldns_rdf_deep_free(serv_rdf);
+		for(inameserver=0; inameserver<ENUM_MAXNAMESERVERS; inameserver++) {
+			if ( server_name[inameserver] != NULL ) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Adding Nameserver [%s]\n", server_name[inameserver]);
+				if ((serv_rdf = ldns_rdf_new_addr_frm_str( server_name[inameserver] ))) {
+					s = ldns_resolver_push_nameserver(res, serv_rdf);
+					ldns_rdf_deep_free(serv_rdf);
+					added_server = 1;
+				}
+			} 
 		}
-	} else {
+	} 
+	if (!added_server) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "No Nameservers specified, using host default\n");
 		/* create a new resolver from /etc/resolv.conf */
 		s = ldns_resolver_new_frm_file(&res, NULL);
 	}
@@ -531,11 +546,17 @@ switch_status_t ldns_lookup(const char *number, const char *root, const char *se
 	return status;
 }
 
-static switch_status_t enum_lookup(char *root, char *in, enum_record_t **results)
+static switch_status_t enum_lookup(char *root, char *in, enum_record_t **results, switch_channel_t *channel, switch_core_session_t *session)
 {
 	switch_status_t sstatus = SWITCH_STATUS_SUCCESS;
 	char *mnum = NULL, *mroot = NULL, *p;
-	char *server = NULL;
+	char *server[ENUM_MAXNAMESERVERS];
+	int inameserver = 0;  
+	char *argv[ ENUM_MAXNAMESERVERS ] = { 0 };
+	int argc;
+	int x = 0;
+	char *enum_nameserver_dup;
+	const char *enum_nameserver = NULL;
 
 	*results = NULL;
 
@@ -551,9 +572,48 @@ static switch_status_t enum_lookup(char *root, char *in, enum_record_t **results
 		root = globals.root;
 	}
 
+	/* Empty the server array */
+	for(inameserver=0; inameserver<ENUM_MAXNAMESERVERS; inameserver++) {
+		server[inameserver] = NULL;
+	}  
 
-	if (!(server = switch_core_get_variable("enum-server"))) {
-		server = globals.server;
+	inameserver = 0;
+
+	/* check for enum_nameserver channel var */
+	
+	if (channel) {
+		enum_nameserver = switch_channel_get_variable(channel, "enum_nameserver");
+	}
+
+	if (zstr(enum_nameserver)) {
+		enum_nameserver = switch_core_get_variable("enum-server");
+	}
+
+	if (!zstr(enum_nameserver)) {
+		/* Blank the server array */
+		for(inameserver=0; inameserver<ENUM_MAXNAMESERVERS; inameserver++) {
+			server[inameserver] = NULL;
+		}
+
+		enum_nameserver_dup = switch_core_session_strdup(session, enum_nameserver);
+		argc = switch_separate_string(enum_nameserver_dup, ',', argv, (sizeof(argv) / sizeof(argv[0])));
+
+		inameserver = 0;
+		for (x = 0; x < argc; x++) {
+			server[inameserver] = argv[x];
+			inameserver++;
+		}
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Enum nameserver override : %s\n", enum_nameserver);
+	}
+
+	if (!inameserver) {
+		/* use config param "nameserver" ( can be up to ENUM_MAXNAMESERVERS ) */
+		for(inameserver = 0; inameserver<ENUM_MAXNAMESERVERS; inameserver++) {
+			server[inameserver] = NULL;
+			if ( globals.nameserver[inameserver] != NULL ) {
+				server[inameserver] = globals.nameserver[inameserver];
+			}
+		}
 	}
 
 	ldns_lookup(mnum, root, server, results);
@@ -577,7 +637,7 @@ SWITCH_STANDARD_DIALPLAN(enum_dialplan_hunt)
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "ENUM Lookup on %s\n", caller_profile->destination_number);
 
-	if (enum_lookup(dp, caller_profile->destination_number, &results) == SWITCH_STATUS_SUCCESS) {
+	if (enum_lookup(dp, caller_profile->destination_number, &results, channel, session) == SWITCH_STATUS_SUCCESS) {
 		if ((extension = switch_caller_extension_new(session, caller_profile->destination_number, caller_profile->destination_number)) == 0) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Memory Error!\n");
 			free_results(&results);
@@ -624,7 +684,7 @@ SWITCH_STANDARD_APP(enum_app_function)
 	if ((argc = switch_separate_string(mydata, ' ', argv, (sizeof(argv) / sizeof(argv[0]))))) {
 		dest = argv[0];
 		root = argv[1];
-		if (enum_lookup(root, dest, &results) == SWITCH_STATUS_SUCCESS) {
+		if (enum_lookup(root, dest, &results, channel, session) == SWITCH_STATUS_SUCCESS) {
 			switch_event_t *vars;
 			
 			if (switch_channel_get_variables(channel, &vars) == SWITCH_STATUS_SUCCESS) {
@@ -692,7 +752,7 @@ SWITCH_STANDARD_API(enum_api)
 		dest = argv[0];
 		root = argv[1];
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Looking up %s@%s\n", dest, root);
-		if (enum_lookup(root, dest, &results) == SWITCH_STATUS_SUCCESS) {
+		if (enum_lookup(root, dest, &results, NULL, session) == SWITCH_STATUS_SUCCESS) {
 			for (rp = results; rp; rp = rp->next) {
 				if (!rp->supported) {
 					continue;
@@ -770,7 +830,7 @@ SWITCH_STANDARD_API(enum_function)
 
 		}
 
-		if (!enum_lookup(root, dest, &results) == SWITCH_STATUS_SUCCESS) {
+		if (!enum_lookup(root, dest, &results, NULL, session) == SWITCH_STATUS_SUCCESS) {
 			stream->write_function(stream, "No Match!\n");
 			return SWITCH_STATUS_SUCCESS;
 		}
@@ -853,7 +913,6 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_enum_shutdown)
 	}
 
 	switch_safe_free(globals.root);
-	switch_safe_free(globals.server);
 	switch_safe_free(globals.isn_root);
 	
 	return SWITCH_STATUS_UNLOAD;

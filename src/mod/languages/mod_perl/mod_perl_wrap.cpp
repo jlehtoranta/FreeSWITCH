@@ -2051,6 +2051,24 @@ XS(_wrap_consoleCleanLog) {
 }
 
 
+XS(_wrap_running) {
+  {
+    bool result;
+    int argvi = 0;
+    dXSARGS;
+    
+    if ((items < 0) || (items > 0)) {
+      SWIG_croak("Usage: running();");
+    }
+    result = (bool)running();
+    ST(argvi) = SWIG_From_bool  SWIG_PERL_CALL_ARGS_1(static_cast< bool >(result)); argvi++ ;
+    XSRETURN(argvi);
+  fail:
+    SWIG_croak_null();
+  }
+}
+
+
 XS(_wrap_email) {
   {
     char *arg1 = (char *) 0 ;
@@ -4675,6 +4693,7 @@ XS(_wrap_new_EventConsumer) {
   {
     char *arg1 = (char *) NULL ;
     char *arg2 = (char *) "" ;
+    int arg3 = (int) 5000 ;
     EventConsumer *result = 0 ;
     int res1 ;
     char *buf1 = 0 ;
@@ -4682,11 +4701,13 @@ XS(_wrap_new_EventConsumer) {
     int res2 ;
     char *buf2 = 0 ;
     int alloc2 = 0 ;
+    int val3 ;
+    int ecode3 = 0 ;
     int argvi = 0;
     dXSARGS;
     
-    if ((items < 0) || (items > 2)) {
-      SWIG_croak("Usage: new_EventConsumer(event_name,subclass_name);");
+    if ((items < 0) || (items > 3)) {
+      SWIG_croak("Usage: new_EventConsumer(event_name,subclass_name,len);");
     }
     if (items > 0) {
       res1 = SWIG_AsCharPtrAndSize(ST(0), &buf1, NULL, &alloc1);
@@ -4702,14 +4723,23 @@ XS(_wrap_new_EventConsumer) {
       }
       arg2 = reinterpret_cast< char * >(buf2);
     }
-    result = (EventConsumer *)new EventConsumer((char const *)arg1,(char const *)arg2);
+    if (items > 2) {
+      ecode3 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(2), &val3);
+      if (!SWIG_IsOK(ecode3)) {
+        SWIG_exception_fail(SWIG_ArgError(ecode3), "in method '" "new_EventConsumer" "', argument " "3"" of type '" "int""'");
+      } 
+      arg3 = static_cast< int >(val3);
+    }
+    result = (EventConsumer *)new EventConsumer((char const *)arg1,(char const *)arg2,arg3);
     ST(argvi) = SWIG_NewPointerObj(SWIG_as_voidptr(result), SWIGTYPE_p_EventConsumer, SWIG_OWNER | SWIG_SHADOW); argvi++ ;
     if (alloc1 == SWIG_NEWOBJ) delete[] buf1;
     if (alloc2 == SWIG_NEWOBJ) delete[] buf2;
+    
     XSRETURN(argvi);
   fail:
     if (alloc1 == SWIG_NEWOBJ) delete[] buf1;
     if (alloc2 == SWIG_NEWOBJ) delete[] buf2;
+    
     SWIG_croak_null();
   }
 }
@@ -4841,6 +4871,33 @@ XS(_wrap_EventConsumer_pop) {
   fail:
     
     
+    
+    SWIG_croak_null();
+  }
+}
+
+
+XS(_wrap_EventConsumer_cleanup) {
+  {
+    EventConsumer *arg1 = (EventConsumer *) 0 ;
+    void *argp1 = 0 ;
+    int res1 = 0 ;
+    int argvi = 0;
+    dXSARGS;
+    
+    if ((items < 1) || (items > 1)) {
+      SWIG_croak("Usage: EventConsumer_cleanup(self);");
+    }
+    res1 = SWIG_ConvertPtr(ST(0), &argp1,SWIGTYPE_p_EventConsumer, 0 |  0 );
+    if (!SWIG_IsOK(res1)) {
+      SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "EventConsumer_cleanup" "', argument " "1"" of type '" "EventConsumer *""'"); 
+    }
+    arg1 = reinterpret_cast< EventConsumer * >(argp1);
+    (arg1)->cleanup();
+    
+    
+    XSRETURN(argvi);
+  fail:
     
     SWIG_croak_null();
   }
@@ -9630,6 +9687,7 @@ static swig_command_info swig_commands[] = {
 {"freeswitchc::getGlobalVariable", _wrap_getGlobalVariable},
 {"freeswitchc::consoleLog", _wrap_consoleLog},
 {"freeswitchc::consoleCleanLog", _wrap_consoleCleanLog},
+{"freeswitchc::running", _wrap_running},
 {"freeswitchc::email", _wrap_email},
 {"freeswitchc::new_IVRMenu", _wrap_new_IVRMenu},
 {"freeswitchc::delete_IVRMenu", _wrap_delete_IVRMenu},
@@ -9697,6 +9755,7 @@ static swig_command_info swig_commands[] = {
 {"freeswitchc::delete_EventConsumer", _wrap_delete_EventConsumer},
 {"freeswitchc::EventConsumer_bind", _wrap_EventConsumer_bind},
 {"freeswitchc::EventConsumer_pop", _wrap_EventConsumer_pop},
+{"freeswitchc::EventConsumer_cleanup", _wrap_EventConsumer_cleanup},
 {"freeswitchc::delete_CoreSession", _wrap_delete_CoreSession},
 {"freeswitchc::CoreSession_session_set", _wrap_CoreSession_session_set},
 {"freeswitchc::CoreSession_session_get", _wrap_CoreSession_session_get},

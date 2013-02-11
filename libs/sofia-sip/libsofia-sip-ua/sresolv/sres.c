@@ -1372,7 +1372,7 @@ sres_cached_answers_sockaddr(sres_resolver_t *res,
     return NULL;
 
   if (!sres_cache_get(res->res_cache, type, name, &result))
-    su_seterrno(ENOENT), (void *)NULL;
+    return su_seterrno(ENOENT), (void *)NULL;
 
   return result;
 }
@@ -3596,7 +3596,7 @@ sres_decode_msg(sres_resolver_t *res,
   m->m_offset = sizeof(m->m_packet.mp_header);
 
   if (m->m_size < m->m_offset) {
-    SU_DEBUG_5(("sres_decode_msg: truncated message\n"));
+    SU_DEBUG_5(("sres_decode_msg: truncated message\n" VA_NONE));
     return -1;
   }
 

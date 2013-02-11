@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -453,6 +453,103 @@ SWITCH_DECLARE(switch_size_t) switch_fd_read_line(int fd, char *buf, switch_size
 	return total;
 }
 
+#define DLINE_BLOCK_SIZE 1024
+#define DLINE_MAX_SIZE 1048576
+SWITCH_DECLARE(switch_size_t) switch_fd_read_dline(int fd, char **buf, switch_size_t *len)
+{
+	char c, *p;
+	int cur;
+	switch_size_t total = 0;
+	char *data = *buf;
+	switch_size_t ilen = *len;
+
+	if (!data) {
+		*len = ilen = DLINE_BLOCK_SIZE;
+		data = malloc(ilen);
+		memset(data, 0, ilen);
+	}
+
+	p = data;
+	while ((cur = read(fd, &c, 1)) == 1) {
+
+		if (total + 2 >= ilen) {
+			if (ilen + DLINE_BLOCK_SIZE > DLINE_MAX_SIZE) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Single line limit reached!\n");	
+				break;
+			}
+
+			ilen += DLINE_BLOCK_SIZE;
+			data = realloc(data, ilen);
+			switch_assert(data);
+			p = data + total;
+
+		}
+
+		total += cur;
+		*p++ = c;
+
+		if (c == '\r' || c == '\n') {
+			break;
+		}
+	}
+
+	*p++ = '\0';
+
+	*len = ilen;
+	*buf = data;
+
+	return total;
+}
+
+
+
+SWITCH_DECLARE(switch_size_t) switch_fp_read_dline(FILE *fd, char **buf, switch_size_t *len)
+{
+	char c, *p;
+	switch_size_t total = 0;
+	char *data = *buf;
+	switch_size_t ilen = *len;
+
+	if (!data) {
+		*len = ilen = DLINE_BLOCK_SIZE;
+		data = malloc(ilen);
+		memset(data, 0, ilen);
+	}
+
+	p = data;
+	//while ((c = fgetc(fd)) != EOF) {
+
+	while (fread(&c, 1, 1, fd) == 1) {
+		
+		if (total + 2 >= ilen) {
+			if (ilen + DLINE_BLOCK_SIZE > DLINE_MAX_SIZE) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Single line limit reached!\n");	
+				break;
+			}
+
+			ilen += DLINE_BLOCK_SIZE;
+			data = realloc(data, ilen);
+			switch_assert(data);
+			p = data + total;
+
+		}
+
+		total++;
+		*p++ = c;
+
+		if (c == '\r' || c == '\n') {
+			break;
+		}
+	}
+
+	*p++ = '\0';
+
+	*len = ilen;
+	*buf = data;
+
+	return total;
+}
+
 SWITCH_DECLARE(char *) switch_amp_encode(char *s, char *buf, switch_size_t len)
 {
 	char *p, *q;
@@ -463,6 +560,42 @@ SWITCH_DECLARE(char *) switch_amp_encode(char *s, char *buf, switch_size_t len)
 
 	for (p = s; x < len; p++) {
 		switch (*p) {
+
+		case '"':
+			if (x + 6 > len - 1) {
+				goto end;
+			}
+			*q++ = '&';
+			*q++ = 'q';
+			*q++ = 'u';
+			*q++ = 'o';
+			*q++ = 't';
+			*q++ = ';';
+			x += 6;
+			break;
+		case '\'':
+			if (x + 6 > len - 1) {
+				goto end;
+			}
+			*q++ = '&';
+			*q++ = 'a';
+			*q++ = 'p';
+			*q++ = 'o';
+			*q++ = 's';
+			*q++ = ';';
+			x += 6;
+			break;
+		case '&':
+			if (x + 5 > len - 1) {
+				goto end;
+			}
+			*q++ = '&';
+			*q++ = 'a';
+			*q++ = 'm';
+			*q++ = 'p';
+			*q++ = ';';
+			x += 5;
+			break;
 		case '<':
 			if (x + 4 > len - 1) {
 				goto end;
@@ -743,12 +876,16 @@ SWITCH_DECLARE(switch_bool_t) switch_simple_email(const char *to,
 		}
 	}
 
+	if (fd > -1) {
+		close(fd);
+		fd = -1;
+	}
 
 	if (zstr(from)) {
 		from = "freeswitch";
 	}
 #ifdef WIN32
-	switch_snprintf(buf, B64BUFFLEN, "type %s | %s -f %s %s %s", filename, runtime.mailer_app, from, runtime.mailer_app_args, to);
+	switch_snprintf(buf, B64BUFFLEN, "\"\"%s\" -f %s %s %s < \"%s\"\"", runtime.mailer_app, from, runtime.mailer_app_args, to, filename);
 #else
 	switch_snprintf(buf, B64BUFFLEN, "/bin/cat %s | %s -f %s %s %s", filename, runtime.mailer_app, from, runtime.mailer_app_args, to);
 #endif
@@ -756,10 +893,6 @@ SWITCH_DECLARE(switch_bool_t) switch_simple_email(const char *to,
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to execute command: %s\n", buf);
 		err = "execute error";
 		rval = SWITCH_FALSE;
-	}
-
-	if (unlink(filename) != 0) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Failed to delete file [%s]\n", filename);
 	}
 
 	if (zstr(err)) {
@@ -777,6 +910,11 @@ SWITCH_DECLARE(switch_bool_t) switch_simple_email(const char *to,
 	if (fd > -1) {
 		close(fd);
 	}
+
+	if (unlink(filename) != 0) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Failed to delete file [%s]\n", filename);
+	}
+
 	if (ifd > -1) {
 		close(ifd);
 	}
@@ -2091,6 +2229,17 @@ SWITCH_DECLARE(unsigned int) switch_separate_string(char *buf, char delim, char 
 		return 0;
 	}
 
+
+	if (*buf == '^' && *(buf+1) == '^') {
+		char *p = buf + 2;
+		
+		if (p && *p && *(p+1)) {
+			buf = p;
+			delim = *buf++;
+		}
+	}
+
+
 	memset(array, 0, arraylen * sizeof(*array));
 
 	return (delim == ' ' ? separate_string_blank_delim(buf, array, arraylen) : separate_string_char_delim(buf, delim, array, arraylen));
@@ -2460,7 +2609,7 @@ const short _switch_C_toupper_[1 + SWITCH_CTYPE_NUM_CHARS] = {
 
 const short *_switch_toupper_tab_ = _switch_C_toupper_;
 
-SWITCH_DECLARE(int) switch_toupper(int c)
+SWITCH_DECLARE(int) old_switch_toupper(int c)
 {
 	if ((unsigned int) c > 255)
 		return (c);
@@ -2507,7 +2656,7 @@ const short _switch_C_tolower_[1 + SWITCH_CTYPE_NUM_CHARS] = {
 
 const short *_switch_tolower_tab_ = _switch_C_tolower_;
 
-SWITCH_DECLARE(int) switch_tolower(int c)
+SWITCH_DECLARE(int) old_switch_tolower(int c)
 {
 	if ((unsigned int) c > 255)
 		return (c);
@@ -2955,6 +3104,37 @@ SWITCH_DECLARE(unsigned long) switch_atoul(const char *nptr)
 	if (tmp < 0) return 0;
 	else return (unsigned long) tmp;
 }
+
+
+SWITCH_DECLARE(char *) switch_strerror_r(int errnum, char *buf, switch_size_t buflen)
+{
+#ifdef HAVE_STRERROR_R
+#ifdef STRERROR_R_CHAR_P
+	/* GNU variant returning char *, avoids warn-unused-result error */
+	return strerror_r(errnum, buf, buflen);
+#else
+	/*
+	 * XSI variant returning int, with GNU compatible error string,
+	 * if no message could be found
+	 */
+	if (strerror_r(errnum, buf, buflen)) {
+		switch_snprintf(buf, buflen, "Unknown error %d", errnum);
+	}
+	return buf;
+#endif /* STRERROR_R_CHAR_P */
+#elif defined(WIN32)
+	/* WIN32 variant */
+	if (strerror_s(buf, buflen, errnum)) {
+		switch_snprintf(buf, buflen, "Unknown error %d", errnum);
+	}
+	return buf;
+#else
+	/* Fallback, copy string into private buffer */
+	switch_copy_string(buf, strerror(errnum), buflen);
+	return buf;
+#endif
+}
+
 
 /* For Emacs:
  * Local Variables:

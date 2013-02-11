@@ -50,7 +50,8 @@ INCLUDES = -I$(top_builddir)/src -I$(top_builddir)/spandsp-sim -DDATADIR="\"$(pk
 
 LIBDIR = -L$(top_builddir)/src
 
-noinst_PROGRAMS =   adsi_tests \
+noinst_PROGRAMS =   ademco_contactid_tests \
+                    adsi_tests \
                     async_tests \
                     at_interpreter_tests \
                     awgn_tests \
@@ -102,12 +103,17 @@ noinst_PROGRAMS =   adsi_tests \
                     super_tone_rx_tests \
                     super_tone_tx_tests \
                     swept_tone_tests \
+                    t31_pseudo_terminal_tests \
                     t31_tests \
                     t35_tests \
                     t38_core_tests \
                     t38_decode \
                     t38_non_ecm_buffer_tests \
                     t4_tests \
+                    t4_t6_tests \
+                    t42_tests \
+                    t81_t82_arith_coding_tests \
+                    t85_tests \
                     time_scale_tests \
                     timezone_tests \
                     tone_detect_tests \
@@ -122,8 +128,7 @@ noinst_PROGRAMS =   adsi_tests \
                     v42bis_tests \
                     v8_tests \
                     vector_float_tests \
-                    vector_int_tests \
-                    tsb85_tests
+                    vector_int_tests
 
 noinst_HEADERS =    echo_monitor.h \
                     fax_tester.h \
@@ -133,6 +138,9 @@ noinst_HEADERS =    echo_monitor.h \
                     modem_monitor.h \
                     pcap_parse.h \
                     udptl.h
+
+ademco_contactid_tests_SOURCES = ademco_contactid_tests.c
+ademco_contactid_tests_LDADD = -L$(top_builddir)/spandsp-sim -lspandsp-sim $(LIBDIR) -lspandsp
 
 adsi_tests_SOURCES = adsi_tests.c
 adsi_tests_LDADD = -L$(top_builddir)/spandsp-sim -lspandsp-sim $(LIBDIR) -lspandsp
@@ -290,6 +298,9 @@ super_tone_tx_tests_LDADD = -L$(top_builddir)/spandsp-sim -lspandsp-sim $(LIBDIR
 swept_tone_tests_SOURCES = swept_tone_tests.c
 swept_tone_tests_LDADD = -L$(top_builddir)/spandsp-sim -lspandsp-sim $(LIBDIR) -lspandsp
 
+t31_pseudo_terminal_tests_SOURCES = t31_pseudo_terminal_tests.c fax_utils.c pseudo_terminals.c
+t31_pseudo_terminal_tests_LDADD = -L$(top_builddir)/spandsp-sim -lspandsp-sim -lspandsp -lutil
+
 t31_tests_SOURCES = t31_tests.c fax_utils.c media_monitor.cpp
 t31_tests_LDADD = -L$(top_builddir)/spandsp-sim -lspandsp-sim $(LIBDIR) -lspandsp
 
@@ -307,6 +318,18 @@ t38_non_ecm_buffer_tests_LDADD = $(LIBDIR) -lspandsp
 
 t4_tests_SOURCES = t4_tests.c
 t4_tests_LDADD = $(LIBDIR) -lspandsp
+
+t4_t6_tests_SOURCES = t4_t6_tests.c
+t4_t6_tests_LDADD = $(LIBDIR) -lspandsp
+
+t42_tests_SOURCES = t42_tests.c
+t42_tests_LDADD = $(LIBDIR) -lspandsp
+
+t81_t82_arith_coding_tests_SOURCES = t81_t82_arith_coding_tests.c
+t81_t82_arith_coding_tests_LDADD = $(LIBDIR) -lspandsp
+
+t85_tests_SOURCES = t85_tests.c
+t85_tests_LDADD = $(LIBDIR) -lspandsp
 
 time_scale_tests_SOURCES = time_scale_tests.c
 time_scale_tests_LDADD = $(LIBDIR) -lspandsp

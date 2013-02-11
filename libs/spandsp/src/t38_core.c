@@ -867,7 +867,7 @@ static int t38_encode_data(t38_core_state_t *s, uint8_t buf[], int data_type, co
 
     if (s->data_transport_protocol == T38_TRANSPORT_TCP_TPKT)
     {
-        /* Fill in the TPKT header (se RFC1006) */
+        /* Fill in the TPKT header (see RFC1006) */
         /* Version */
         buf[0] = 3;
         /* Reserved */
@@ -1100,11 +1100,11 @@ SPAN_DECLARE(int) t38_core_restart(t38_core_state_t *s)
 /*- End of function --------------------------------------------------------*/
 
 SPAN_DECLARE(t38_core_state_t *) t38_core_init(t38_core_state_t *s,
-                                               t38_rx_indicator_handler_t *rx_indicator_handler,
-                                               t38_rx_data_handler_t *rx_data_handler,
-                                               t38_rx_missing_handler_t *rx_missing_handler,
+                                               t38_rx_indicator_handler_t rx_indicator_handler,
+                                               t38_rx_data_handler_t rx_data_handler,
+                                               t38_rx_missing_handler_t rx_missing_handler,
                                                void *rx_user_data,
-                                               t38_tx_packet_handler_t *tx_packet_handler,
+                                               t38_tx_packet_handler_t tx_packet_handler,
                                                void *tx_packet_user_data)
 {
     if (s == NULL)

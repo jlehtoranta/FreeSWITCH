@@ -199,6 +199,11 @@ SOFIAPUBVAR tag_typedef_t nutag_autoack;
 #define NUTAG_AUTOACK_REF(x)    nutag_autoack_ref, tag_bool_vr(&(x))
 SOFIAPUBVAR tag_typedef_t nutag_autoack_ref;
 
+#define NUTAG_TIMER_AUTOREQUIRE(x)        nutag_timer_autorequire, tag_bool_v(x)
+SOFIAPUBVAR tag_typedef_t nutag_timer_autorequire;
+#define NUTAG_TIMER_AUTOREQUIRE_REF(x)    nutag_timer_autorequire_ref, tag_bool_vr(&(x))
+SOFIAPUBVAR tag_typedef_t nutag_timer_autorequire_ref;
+
 #define NUTAG_AUTOANSWER(x)     nutag_autoanswer, tag_bool_v(x)
 SOFIAPUBVAR tag_typedef_t nutag_autoanswer;
 #define NUTAG_AUTOANSWER_REF(x) nutag_autoanswer_ref, tag_bool_vr(&(x))
@@ -544,6 +549,11 @@ SOFIAPUBVAR tag_typedef_t nutag_callee_caps_ref;
 SOFIAPUBVAR tag_typedef_t nutag_path_enable;
 #define NUTAG_PATH_ENABLE_REF(x) nutag_path_enable_ref, tag_bool_vr(&(x))
 SOFIAPUBVAR tag_typedef_t nutag_path_enable_ref;
+
+#define NUTAG_RETRY_AFTER_ENABLE(x)   nutag_retry_after_enable, tag_bool_v(x)
+SOFIAPUBVAR tag_typedef_t nutag_retry_after_enable;
+#define NUTAG_RETRY_AFTER_ENABLE_REF(x) nutag_retry_after_enable_ref, tag_bool_vr(&(x))
+SOFIAPUBVAR tag_typedef_t nutag_retry_after_enable_ref;
 
 #define NUTAG_SERVICE_ROUTE_ENABLE(x) nutag_service_route_enable, tag_bool_v(x)
 SOFIAPUBVAR tag_typedef_t nutag_service_route_enable;

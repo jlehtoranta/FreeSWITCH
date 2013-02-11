@@ -1,6 +1,6 @@
 /*
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2009-2010, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2009-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -17,7 +17,7 @@
  * The Original Code is FreeSWITCH mod_unimrcp
  *
  * The Initial Developer of the Original Code is
- * Christopher M. Rienzo <chris@rienzo.net>
+ * Christopher M. Rienzo <chris@rienzo.com>
  *
  * Portions created by the Initial Developer are Copyright (C)
  * the Initial Developer. All Rights Reserved.
@@ -25,8 +25,10 @@
  * Contributor(s):
  *
  * Brian West <brian@freeswitch.org>
- * Christopher M. Rienzo <chris@rienzo.net>
+ * Christopher M. Rienzo <chris@rienzo.com>
  * Luke Dashjr <luke@openmethods.com> (OpenMethods, LLC)
+ *
+ * Maintainer: Christopher M. Rienzo <chris@rienzo.com>
  *
  * mod_unimrcp.c -- UniMRCP module (MRCP client)
  *
@@ -337,6 +339,7 @@ struct speech_channel {
 	switch_hash_t *params;
 	/** app specific data */
 	void *data;
+	void *fsh;
 };
 typedef struct speech_channel speech_channel_t;
 
@@ -1589,6 +1592,7 @@ static switch_status_t synth_speech_open(switch_speech_handle_t *sh, const char 
 		goto done;
 	}
 	sh->private_info = schannel;
+	schannel->fsh = sh;
 
 	/* Open the channel */
 	if (zstr(profile_name)) {
@@ -1833,7 +1837,16 @@ static apt_bool_t speech_on_channel_add(mrcp_application_t *application, mrcp_se
 	if (!descriptor) {
 		goto error;
 	}
+
 	schannel->rate = descriptor->sampling_rate;
+
+	/* report negotiated sample rate back to FreeSWITCH */
+	if (schannel->type == SPEECH_CHANNEL_SYNTHESIZER) {
+		((switch_speech_handle_t*)schannel->fsh)->native_rate = schannel->rate;
+	} else {
+		((switch_asr_handle_t*)schannel->fsh)->native_rate = schannel->rate;
+	}
+
 	if (descriptor->name.length) {
 		strncpy(codec_name, descriptor->name.buf, sizeof(codec_name));
 	}
@@ -2912,6 +2925,7 @@ static switch_status_t recog_asr_open(switch_asr_handle_t *ah, const char *codec
 		status = SWITCH_STATUS_FALSE;
 		goto done;
 	}
+	schannel->fsh = ah;
 	ah->private_info = schannel;
 	r = (recognizer_data_t *) switch_core_alloc(ah->memory_pool, sizeof(recognizer_data_t));
 	schannel->data = r;

@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -122,7 +122,7 @@ static lua_State *lua_init(void)
 		luaopen_freeswitch(L);
 		lua_gc(L, LUA_GCRESTART, 0);
 		lua_atpanic(L, panic);
-		error = luaL_loadbuffer(L, buff, strlen(buff), "line") || docall(L, 0, 1, 0);
+		error = luaL_loadbuffer(L, buff, strlen(buff), "line") || docall(L, 0, 0, 0);
 	}
 	return L;
 }
@@ -141,10 +141,10 @@ static int lua_parse_and_execute(lua_State * L, char *input_code)
 	
 	if (*input_code == '~') {
 		char *buff = input_code + 1;
-		error = luaL_loadbuffer(L, buff, strlen(buff), "line") || docall(L, 0, 1, 0);	//lua_pcall(L, 0, 0, 0);
+		error = luaL_loadbuffer(L, buff, strlen(buff), "line") || docall(L, 0, 0, 0);	//lua_pcall(L, 0, 0, 0);
 	} else if (!strncasecmp(input_code, "#!/lua", 6)) {
 		char *buff = input_code + 6;
-		error = luaL_loadbuffer(L, buff, strlen(buff), "line") || docall(L, 0, 1, 0);	//lua_pcall(L, 0, 0, 0);
+		error = luaL_loadbuffer(L, buff, strlen(buff), "line") || docall(L, 0, 0, 0);	//lua_pcall(L, 0, 0, 0);
 	} else {
 		char *args = strchr(input_code, ' ');
 		if (args) {
@@ -168,14 +168,14 @@ static int lua_parse_and_execute(lua_State * L, char *input_code)
 			}
 
 			if (code) {
-				error = luaL_loadbuffer(L, code, strlen(code), "line") || docall(L, 0, 1, 0);
+				error = luaL_loadbuffer(L, code, strlen(code), "line") || docall(L, 0, 0, 0);
 				switch_safe_free(code);
 			}
 		} else {
 			// Force empty argv table
 			char *code = NULL;
 			code = switch_mprintf("argv = {[0]='%s'};", input_code);
-			error = luaL_loadbuffer(L, code, strlen(code), "line") || docall(L, 0, 1, 0);
+			error = luaL_loadbuffer(L, code, strlen(code), "line") || docall(L, 0, 0, 0);
 			switch_safe_free(code);
 		}
 
@@ -187,7 +187,7 @@ static int lua_parse_and_execute(lua_State * L, char *input_code)
 				switch_assert(fdup);
 				file = fdup;
 			}
-			error = luaL_loadfile(L, file) || docall(L, 0, 1, 0);
+			error = luaL_loadfile(L, file) || docall(L, 0, 0, 0);
 			switch_safe_free(fdup);
 		}
 	}
@@ -260,7 +260,7 @@ static switch_xml_t lua_fetch(const char *section,
 			mod_lua_conjure_event(L, params, "params", 1);
 		}
 
-		if( error = lua_parse_and_execute(L, mycmd) ){
+		if((error = lua_parse_and_execute(L, mycmd))){
 		    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "LUA script parse/execute error!\n");
 		    return NULL;
 		}
@@ -331,7 +331,7 @@ static switch_status_t do_config(void)
 
 	if (cpath_stream.data_len) {
 		char *lua_cpath = NULL;
-		if (lua_cpath = getenv("LUA_CPATH")) {
+		if ((lua_cpath = getenv("LUA_CPATH"))) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "lua: appending LUA_CPATH: '%s'\n", lua_cpath);
 			cpath_stream.write_function(&cpath_stream, ";%s", lua_cpath);
 		}
@@ -349,7 +349,7 @@ static switch_status_t do_config(void)
 
 	if (path_stream.data_len) {
 		char *lua_path = NULL;
-		if (lua_path = getenv("LUA_PATH")) {
+		if ((lua_path = getenv("LUA_PATH"))) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "lua: appending LUA_PATH: '%s'\n", lua_path);
 			path_stream.write_function(&path_stream, ";%s", lua_path);
 		}
@@ -483,10 +483,14 @@ SWITCH_STANDARD_API(lua_api_function)
 		}
 
 		if ((error = lua_parse_and_execute(L, mycmd))) {
-			if (switch_event_get_header(stream->param_event, "http-host")) {
-				stream->write_function(stream, "Content-Type: text/html\n\n<H2>Error Executing Script</H2>");
+			char * http = switch_event_get_header(stream->param_event, "http-uri");
+			if (http && (!strncasecmp(http, "/api/", 5) || !strncasecmp(http, "/webapi/", 8))) {
+					/* api -> fs api streams the Content-Type e.g. text/html or text/xml               */
+					/* api -> default Content-Type is text/plain 				                       */
+					/* webapi, txtapi -> Content-Type defined in mod_xmlrpc	text/html resp. text/plain */
+					stream->write_function(stream, "<H2>Error Executing Script</H2>");
 			} else {
-				stream->write_function(stream, "-ERR encountered\n");
+				stream->write_function(stream, "-ERR Cannot execute script\n");
 			}
 		}
 		lua_uninit(L);

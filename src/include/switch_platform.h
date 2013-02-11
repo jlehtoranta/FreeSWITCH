@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -88,7 +88,7 @@ SWITCH_BEGIN_EXTERN_C
 #endif
 #undef inline
 #define inline __inline
-#ifndef uint32_t
+#if !defined(_STDINT) && !defined(uint32_t)
 typedef unsigned __int8 uint8_t;
 typedef unsigned __int16 uint16_t;
 typedef unsigned __int32 uint32_t;
@@ -258,7 +258,16 @@ typedef intptr_t switch_ssize_t;
 #endif
 
 #ifndef TIME_T_FMT
+#if defined(__FreeBSD__) && SIZEOF_VOIDP == 4
+#define TIME_T_FMT "d"
+#else
 #define TIME_T_FMT "ld"
+#endif
+#endif
+
+
+#if UINTPTR_MAX == 0xffffffffffffffff
+#define FS_64BIT 1
 #endif
 
 #endif

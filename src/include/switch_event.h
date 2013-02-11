@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -41,10 +41,10 @@
 	Builtin events are fired by the core at various points in the execution of the application and custom events can be 
 	reserved and registered so events from an external module can be rendered and handled by an another even handler module.
 
-	If the work time to process an event in a callback is anticipated to grow beyond a very small amount of time it is reccommended
-	that you impelment your own handler thread and FIFO queue so you can accept the events int the callback and queue them 
-	into your own thread rather than tie up the delivery agent.  It is in to opinion of the author that such a necessity 
-	should be judged on a per-use basis and therefore does not fall within the scope of this system to provide that 
+	If the work time to process an event in a callback is anticipated to grow beyond a very small amount of time it is recommended
+	that you implement your own handler thread and FIFO queue so you can accept the events in the callback and queue them 
+	into your own thread rather than tie up the delivery agent.  It is in the opinion of the author that such a necessity 
+	should be judged on a per-use basis and therefore it does not fall within the scope of this system to provide that 
 	functionality at a core level.
 
 */
@@ -101,6 +101,20 @@ struct switch_event {
 	struct switch_event *next;
 	int flags;
 };
+
+typedef struct switch_serial_event_s {
+	int event_id;
+	int priority;
+	int flags;
+	char *owner;
+	char *subclass_name;
+	char *body;
+} switch_serial_event_t;
+
+typedef struct switch_serial_event_header_s {
+	char *name;
+	char *value;
+} switch_serial_event_header_t;
 
 typedef enum {
 	EF_UNIQ_HEADERS = (1 << 0),
@@ -280,7 +294,7 @@ SWITCH_DECLARE(switch_status_t) switch_name_event(const char *name, switch_event
   \param owner the owner of the event name
   \param subclass_name the name to reserve
   \return SWITCH_STATUS_SUCCESS if the name was reserved
-  \note There is nothing to enforce this but I reccommend using module::event_name for the subclass names
+  \note There is nothing to enforce this but I recommend using module::event_name for the subclass names
 
 */
 SWITCH_DECLARE(switch_status_t) switch_event_reserve_subclass_detailed(const char *owner, const char *subclass_name);
@@ -288,21 +302,24 @@ SWITCH_DECLARE(switch_status_t) switch_event_reserve_subclass_detailed(const cha
 SWITCH_DECLARE(switch_status_t) switch_event_free_subclass_detailed(const char *owner, const char *subclass_name);
 
 /*!
-  \brief Render a string representation of an event sutable for printing or network transport 
+  \brief Render a string representation of an event suitable for printing or network transport 
   \param event the event to render
   \param str a string pointer to point at the allocated data
   \param encode url encode the headers
   \return SWITCH_STATUS_SUCCESS if the operation was successful
   \note you must free the resulting string when you are finished with it
 */
+SWITCH_DECLARE(switch_status_t) switch_event_binary_deserialize(switch_event_t **eventp, void **data, switch_size_t len, switch_bool_t destroy);
+SWITCH_DECLARE(switch_status_t) switch_event_binary_serialize(switch_event_t *event, void **data, switch_size_t *len);
 SWITCH_DECLARE(switch_status_t) switch_event_serialize(switch_event_t *event, char **str, switch_bool_t encode);
 SWITCH_DECLARE(switch_status_t) switch_event_serialize_json(switch_event_t *event, char **str);
 SWITCH_DECLARE(switch_status_t) switch_event_create_json(switch_event_t **event, const char *json);
 SWITCH_DECLARE(switch_status_t) switch_event_create_brackets(char *data, char a, char b, char c, switch_event_t **event, char **new_data, switch_bool_t dup);
+SWITCH_DECLARE(switch_status_t) switch_event_create_array_pair(switch_event_t **event, char **names, char **vals, int len);
 
 #ifndef SWIG
 /*!
-  \brief Render a XML representation of an event sutable for printing or network transport
+  \brief Render a XML representation of an event suitable for printing or network transport
   \param event the event to render
   \param fmt optional body of the event (varargs see standard sprintf family)
   \return the xml object if the operation was successful
@@ -312,7 +329,7 @@ SWITCH_DECLARE(switch_xml_t) switch_event_xmlize(switch_event_t *event, const ch
 #endif
 
 /*!
-  \brief Determine if the event system has been initilized
+  \brief Determine if the event system has been initialized
   \return SWITCH_STATUS_SUCCESS if the system is running
 */
 SWITCH_DECLARE(switch_status_t) switch_event_running(void);
@@ -330,8 +347,8 @@ SWITCH_DECLARE(switch_status_t) switch_event_add_body(switch_event_t *event, con
 
 SWITCH_DECLARE(switch_status_t) switch_event_set_body(switch_event_t *event, const char *body);
 
-SWITCH_DECLARE(char *) switch_event_expand_headers_check(switch_event_t *event, const char *in, switch_event_t *var_list, switch_event_t *api_list);
-#define switch_event_expand_headers(_event, _in) switch_event_expand_headers_check(_event, _in, NULL, NULL)
+SWITCH_DECLARE(char *) switch_event_expand_headers_check(switch_event_t *event, const char *in, switch_event_t *var_list, switch_event_t *api_list, uint32_t recur);
+#define switch_event_expand_headers(_event, _in) switch_event_expand_headers_check(_event, _in, NULL, NULL, 0)
 
 SWITCH_DECLARE(switch_status_t) switch_event_create_pres_in_detailed(_In_z_ char *file, _In_z_ char *func, _In_ int line,
 																	 _In_z_ const char *proto, _In_z_ const char *login,
@@ -402,6 +419,9 @@ SWITCH_DECLARE(void) switch_event_deliver(switch_event_t **event);
 
 SWITCH_DECLARE(char *) switch_event_build_param_string(switch_event_t *event, const char *prefix, switch_hash_t *vars_map);
 SWITCH_DECLARE(int) switch_event_check_permission_list(switch_event_t *list, const char *name);
+SWITCH_DECLARE(void) switch_event_add_presence_data_cols(switch_channel_t *channel, switch_event_t *event, const char *prefix);
+SWITCH_DECLARE(void) switch_event_launch_dispatch_threads(uint32_t max);
+
 ///\}
 
 SWITCH_END_EXTERN_C

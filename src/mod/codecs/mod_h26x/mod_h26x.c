@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -84,7 +84,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_h26x_load)
 	*module_interface = switch_loadable_module_create_module_interface(pool, modname);
 	SWITCH_ADD_CODEC(codec_interface, "H.264 Video (passthru)");
 	switch_core_codec_add_implementation(pool, codec_interface,
-										 SWITCH_CODEC_TYPE_VIDEO, 99, "H264", NULL, 90000, 90000, 0,
+										 SWITCH_CODEC_TYPE_VIDEO, 97, "H264", NULL, 90000, 90000, 0,
 										 0, 0, 0, 0, 1, 1, switch_h26x_init, switch_h26x_encode, switch_h26x_decode, switch_h26x_destroy);
 	SWITCH_ADD_CODEC(codec_interface, "H.263 Video (passthru)");
 	switch_core_codec_add_implementation(pool, codec_interface,

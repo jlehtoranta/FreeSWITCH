@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -24,7 +24,7 @@
  * Seventh Signal Ltd. & Co. KG, All Rights Reserverd.
  *
  * Contributor(s):
- * Daniel Swarbrick <daniel.swarbrick@seventhsignal.de>
+ * Daniel Swarbrick <daniel.swarbrick@gmail.com>
  * Stefan Knoblich <s.knoblich@axsentis.de>
  * 
  * subagent.h -- SNMP Agent Definitions

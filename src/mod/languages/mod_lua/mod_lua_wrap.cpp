@@ -1627,6 +1627,24 @@ fail:
 }
 
 
+static int _wrap_running(lua_State* L) {
+  int SWIG_arg = -1;
+  bool result;
+  
+  SWIG_check_num_args("running",0,0)
+  result = (bool)running();
+  SWIG_arg=0;
+  lua_pushboolean(L,(int)(result==true)); SWIG_arg++;
+  return SWIG_arg;
+  
+  if(0) SWIG_fail;
+  
+fail:
+  lua_error(L);
+  return SWIG_arg;
+}
+
+
 static int _wrap_email(lua_State* L) {
   int SWIG_arg = -1;
   char *arg1 = (char *) 0 ;
@@ -3705,18 +3723,23 @@ static int _wrap_new_EventConsumer(lua_State* L) {
   int SWIG_arg = -1;
   char *arg1 = (char *) NULL ;
   char *arg2 = (char *) "" ;
+  int arg3 = (int) 5000 ;
   EventConsumer *result = 0 ;
   
-  SWIG_check_num_args("EventConsumer",0,2)
+  SWIG_check_num_args("EventConsumer",0,3)
   if(lua_gettop(L)>=1 && !lua_isstring(L,1)) SWIG_fail_arg("EventConsumer",1,"char const *");
   if(lua_gettop(L)>=2 && !lua_isstring(L,2)) SWIG_fail_arg("EventConsumer",2,"char const *");
+  if(lua_gettop(L)>=3 && !lua_isnumber(L,3)) SWIG_fail_arg("EventConsumer",3,"int");
   if(lua_gettop(L)>=1){
     arg1 = (char *)lua_tostring(L, 1);
   }
   if(lua_gettop(L)>=2){
     arg2 = (char *)lua_tostring(L, 2);
   }
-  result = (EventConsumer *)new EventConsumer((char const *)arg1,(char const *)arg2);
+  if(lua_gettop(L)>=3){
+    arg3 = (int)lua_tonumber(L, 3);
+  }
+  result = (EventConsumer *)new EventConsumer((char const *)arg1,(char const *)arg2,arg3);
   SWIG_arg=0;
   SWIG_NewPointerObj(L,result,SWIGTYPE_p_EventConsumer,1); SWIG_arg++; 
   return SWIG_arg;
@@ -3822,6 +3845,30 @@ fail:
 }
 
 
+static int _wrap_EventConsumer_cleanup(lua_State* L) {
+  int SWIG_arg = -1;
+  EventConsumer *arg1 = (EventConsumer *) 0 ;
+  
+  SWIG_check_num_args("cleanup",1,1)
+  if(!SWIG_isptrtype(L,1)) SWIG_fail_arg("cleanup",1,"EventConsumer *");
+  
+  if (!SWIG_IsOK(SWIG_ConvertPtr(L,1,(void**)&arg1,SWIGTYPE_p_EventConsumer,0))){
+    SWIG_fail_ptr("EventConsumer_cleanup",1,SWIGTYPE_p_EventConsumer);
+  }
+  
+  (arg1)->cleanup();
+  SWIG_arg=0;
+  
+  return SWIG_arg;
+  
+  if(0) SWIG_fail;
+  
+fail:
+  lua_error(L);
+  return SWIG_arg;
+}
+
+
 static void swig_delete_EventConsumer(void *obj) {
 EventConsumer *arg1 = (EventConsumer *) obj;
 delete arg1;
@@ -3829,6 +3876,7 @@ delete arg1;
 static swig_lua_method swig_EventConsumer_methods[] = {
     {"bind", _wrap_EventConsumer_bind}, 
     {"pop", _wrap_EventConsumer_pop}, 
+    {"cleanup", _wrap_EventConsumer_cleanup}, 
     {0,0}
 };
 static swig_lua_attribute swig_EventConsumer_attributes[] = {
@@ -7741,6 +7789,34 @@ fail:
 }
 
 
+static int _wrap_Dbh_load_extension(lua_State* L) {
+  int SWIG_arg = -1;
+  LUA::Dbh *arg1 = (LUA::Dbh *) 0 ;
+  char *arg2 = (char *) 0 ;
+  int result;
+  
+  SWIG_check_num_args("load_extension",2,2)
+  if(!SWIG_isptrtype(L,1)) SWIG_fail_arg("load_extension",1,"LUA::Dbh *");
+  if(!lua_isstring(L,2)) SWIG_fail_arg("load_extension",2,"char const *");
+  
+  if (!SWIG_IsOK(SWIG_ConvertPtr(L,1,(void**)&arg1,SWIGTYPE_p_LUA__Dbh,0))){
+    SWIG_fail_ptr("Dbh_load_extension",1,SWIGTYPE_p_LUA__Dbh);
+  }
+  
+  arg2 = (char *)lua_tostring(L, 2);
+  result = (int)(arg1)->load_extension((char const *)arg2);
+  SWIG_arg=0;
+  lua_pushnumber(L, (lua_Number) result); SWIG_arg++;
+  return SWIG_arg;
+  
+  if(0) SWIG_fail;
+  
+fail:
+  lua_error(L);
+  return SWIG_arg;
+}
+
+
 static void swig_delete_Dbh(void *obj) {
 LUA::Dbh *arg1 = (LUA::Dbh *) obj;
 delete arg1;
@@ -7751,6 +7827,7 @@ static swig_lua_method swig_LUA_Dbh_methods[] = {
     {"test_reactive", _wrap_Dbh_test_reactive}, 
     {"query", _wrap_Dbh_query}, 
     {"affected_rows", _wrap_Dbh_affected_rows}, 
+    {"load_extension", _wrap_Dbh_load_extension}, 
     {0,0}
 };
 static swig_lua_attribute swig_LUA_Dbh_attributes[] = {
@@ -7769,6 +7846,7 @@ static const struct luaL_reg swig_commands[] = {
     { "getGlobalVariable", _wrap_getGlobalVariable},
     { "consoleLog", _wrap_consoleLog},
     { "consoleCleanLog", _wrap_consoleCleanLog},
+    { "running", _wrap_running},
     { "email", _wrap_email},
     { "console_log", _wrap_console_log},
     { "console_clean_log", _wrap_console_clean_log},

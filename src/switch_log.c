@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -296,6 +296,7 @@ static void *SWITCH_THREAD_FUNC log_thread(switch_thread_t *t, void *obj)
 		}
 
 		if (!pop) {
+			THREAD_RUNNING = -1;
 			break;
 		}
 
@@ -346,9 +347,11 @@ SWITCH_DECLARE(void) switch_log_vprintf(switch_text_channel_t channel, const cha
 	const char *extra_fmt = "%s [%s] %s:%d%c%s";
 #endif
 	switch_log_level_t limit_level = runtime.hard_log_level;
+	switch_log_level_t special_level = SWITCH_LOG_UNINIT;
 
 	if (channel == SWITCH_CHANNEL_ID_SESSION && userdata) {
 		switch_core_session_t *session = (switch_core_session_t *) userdata;
+		special_level = session->loglevel;
 		if (limit_level < session->loglevel) {
 			limit_level = session->loglevel;
 		}
@@ -359,7 +362,7 @@ SWITCH_DECLARE(void) switch_log_vprintf(switch_text_channel_t channel, const cha
 			return;
 		}
 
-		level = 7;
+		level = 1;
 	}
 
 	if (level > limit_level) {
@@ -477,11 +480,13 @@ SWITCH_DECLARE(void) switch_log_vprintf(switch_text_channel_t channel, const cha
 		switch_set_string(node->func, funcp);
 		node->line = line;
 		node->level = level;
+		node->slevel = special_level;
 		node->content = content;
 		node->timestamp = now;
 		node->channel = channel;
 		if (channel == SWITCH_CHANNEL_ID_SESSION) {
-			node->userdata = userdata ? strdup(switch_core_session_get_uuid((switch_core_session_t *) userdata)) : NULL;
+			switch_core_session_t *session = (switch_core_session_t *) userdata;
+			node->userdata = userdata ? strdup(switch_core_session_get_uuid(session)) : NULL;
 		} else {
 			node->userdata = !zstr(userdata) ? strdup(userdata) : NULL;
 		}
@@ -543,7 +548,7 @@ SWITCH_DECLARE(void) switch_core_memory_reclaim_logger(void)
 #ifdef SWITCH_LOG_RECYCLE
 	void *pop;
 	int size = switch_queue_size(LOG_RECYCLE_QUEUE);
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CONSOLE, "Returning %d recycled log node(s) %d bytes\n", size,
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_CONSOLE, "Returning %d recycled log node(s) %d bytes\n", size,
 					  (int) sizeof(switch_log_node_t) * size);
 	while (switch_queue_trypop(LOG_RECYCLE_QUEUE, &pop) == SWITCH_STATUS_SUCCESS) {
 		switch_log_node_free(&pop);
@@ -558,7 +563,7 @@ SWITCH_DECLARE(switch_status_t) switch_log_shutdown(void)
 {
 	switch_status_t st;
 
-	THREAD_RUNNING = -1;
+
 	switch_queue_push(LOG_QUEUE, NULL);
 	while (THREAD_RUNNING) {
 		switch_cond_next();

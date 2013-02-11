@@ -1,6 +1,6 @@
 /* 
  * mod_rtmp for FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2011, Barracuda Networks Inc.
+ * Copyright (C) 2011-2012, Barracuda Networks Inc.
  *
  * Version: MPL 1.1
  *
@@ -250,6 +250,7 @@ switch_status_t rtmp_on_hangup(switch_core_session_t *session)
 	tech_pvt = switch_core_session_get_private(session);
 	assert(tech_pvt != NULL);
 
+	switch_thread_rwlock_wrlock(tech_pvt->rtmp_session->rwlock);
 	switch_clear_flag_locked(tech_pvt, TFLAG_IO);
 	//switch_thread_cond_signal(tech_pvt->cond);
 	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "%s CHANNEL HANGUP\n", switch_channel_get_name(channel));
@@ -285,6 +286,8 @@ switch_status_t rtmp_on_hangup(switch_core_session_t *session)
 		switch_ivr_unhold(session);
 	}
 #endif
+
+	switch_thread_rwlock_unlock(tech_pvt->rtmp_session->rwlock);
 
 	return SWITCH_STATUS_SUCCESS;
 }
@@ -590,7 +593,7 @@ switch_call_cause_t rtmp_outgoing_channel(switch_core_session_t *session, switch
 		goto fail;
 	}
 	
-	if (!(*newsession = switch_core_session_request(rtmp_globals.rtmp_endpoint_interface, flags, SWITCH_CALL_DIRECTION_OUTBOUND, inpool))) {
+	if (!(*newsession = switch_core_session_request_uuid(rtmp_globals.rtmp_endpoint_interface, flags, SWITCH_CALL_DIRECTION_OUTBOUND, inpool, switch_event_get_header(var_event, "origination_uuid")))) {
 		goto fail;
 	}
 	
@@ -625,7 +628,7 @@ switch_call_cause_t rtmp_outgoing_channel(switch_core_session_t *session, switch
 	/*switch_channel_mark_pre_answered(channel);*/
 	
 	switch_channel_ring_ready(channel);
-	rtmp_send_incoming_call(*newsession);
+	rtmp_send_incoming_call(*newsession, var_event);
 	
 	switch_channel_set_state(channel, CS_INIT);
 	switch_set_flag_locked(tech_pvt, TFLAG_IO);
@@ -634,7 +637,7 @@ switch_call_cause_t rtmp_outgoing_channel(switch_core_session_t *session, switch
 
 	switch_core_hash_insert_wrlock(rsession->session_hash, switch_core_session_get_uuid(*newsession), tech_pvt, rsession->session_rwlock);
 		
-	if (switch_core_session_thread_launch(tech_pvt->session) != SWITCH_STATUS_SUCCESS) {
+	if (switch_core_session_thread_launch(tech_pvt->session) == SWITCH_STATUS_FALSE) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't spawn thread\n");	
 		goto fail;
 	}
@@ -647,7 +650,9 @@ switch_call_cause_t rtmp_outgoing_channel(switch_core_session_t *session, switch
 	
 fail:
 	if (*newsession) {
-		switch_core_session_destroy(newsession);
+		if (!switch_core_session_running(*newsession) && !switch_core_session_started(*newsession)) {
+			switch_core_session_destroy(newsession);
+		}
 	}
 	if (rsession) {
 		rtmp_session_rwunlock(rsession);
@@ -800,8 +805,10 @@ switch_status_t rtmp_session_destroy(rtmp_session_t **session)
 		switch_hash_this(hi, &key, &keylen, &val);		
 		item = (rtmp_private_t *)val;
 		
-		channel = switch_core_session_get_channel(item->session);
-		switch_channel_hangup(channel, SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
+		if ( item->session ) {
+			channel = switch_core_session_get_channel(item->session);
+			switch_channel_hangup(channel, SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
+		}
 	}
 	switch_thread_rwlock_unlock((*session)->session_rwlock);
 	
@@ -847,6 +854,7 @@ switch_call_cause_t rtmp_session_create_call(rtmp_session_t *rsession, switch_co
 		return SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER;
 	}
 
+
 	pool = switch_core_session_get_pool(*newsession);	
  	channel = switch_core_session_get_channel(*newsession);
 	switch_channel_set_name(channel, switch_core_session_sprintf(*newsession, "rtmp/%s/%s", rsession->profile->name, number));
@@ -871,7 +879,7 @@ switch_call_cause_t rtmp_session_create_call(rtmp_session_t *rsession, switch_co
 	
 	caller_profile = switch_caller_profile_new(pool, switch_str_nil(auth_user), dialplan, 
 		SWITCH_DEFAULT_CLID_NAME, 
-		!zstr(auth_user) ? auth_user : "0000000000", 
+		!zstr(auth_user) ? auth_user : SWITCH_DEFAULT_CLID_NUMBER,
 		rsession->remote_address /* net addr */, 
 		NULL /* ani   */, 
 		NULL /* anii  */, 
@@ -911,17 +919,21 @@ switch_call_cause_t rtmp_session_create_call(rtmp_session_t *rsession, switch_co
 		}
 	}
 
-	switch_core_hash_insert_wrlock(rsession->session_hash, switch_core_session_get_uuid(*newsession), tech_pvt, rsession->session_rwlock);
-
-	if (switch_core_session_thread_launch(tech_pvt->session) != SWITCH_STATUS_SUCCESS) {
+	if (switch_core_session_thread_launch(tech_pvt->session) == SWITCH_STATUS_FALSE) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't spawn thread\n");
 		goto fail;
 	}
 
+	switch_core_hash_insert_wrlock(rsession->session_hash, switch_core_session_get_uuid(*newsession), tech_pvt, rsession->session_rwlock);
+	
 	return SWITCH_CAUSE_SUCCESS;
 	
 fail:
-	switch_core_session_destroy(newsession);
+
+	if (!switch_core_session_running(*newsession) && !switch_core_session_started(*newsession)) {
+		switch_core_session_destroy(newsession);
+	}
+
 	return SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER;	
 }
 
@@ -1048,6 +1060,10 @@ void rtmp_add_registration(rtmp_session_t *rsession, const char *auth, const cha
 		
 		dup = strdup(auth);
 		switch_split_user_domain(dup, &user, &domain);
+
+
+		reg->user = switch_core_strdup(rsession->pool, user);
+		reg->domain = switch_core_strdup(rsession->pool, domain);
 			
 		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "User", user);
 		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Domain", domain);
@@ -1072,9 +1088,11 @@ static void rtmp_clear_reg_auth(rtmp_session_t *rsession, const char *auth, cons
 					/* Replace hash entry by its next ptr */
 					switch_core_hash_insert(rsession->profile->reg_hash, auth, reg->next);
 				}
-			
+
 				if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, RTMP_EVENT_UNREGISTER) == SWITCH_STATUS_SUCCESS) {
 					rtmp_event_fill(rsession, event);
+					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "User", reg->user);
+					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Domain", reg->domain);
 					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Nickname", switch_str_nil(reg->nickname));
 					switch_event_fire(&event);
 				}

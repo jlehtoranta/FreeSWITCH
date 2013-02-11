@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, Anthony Minessale II
+ * Copyright (c) 2007-2012, Anthony Minessale II
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -473,7 +473,7 @@ static void *ftdm_analog_channel_run(ftdm_thread_t *me, void *obj)
 	sig.span_id = ftdmchan->span_id;
 	sig.channel = ftdmchan;
 	
-	ftdm_assert(interval != 0, NULL);
+	ftdm_assert(interval != 0, "Invalid interval");
 
 	if (!dial_timeout) {
 		ftdm_log_chan(ftdmchan, FTDM_LOG_DEBUG, "Not waiting for dial tone to dial number %s\n", ftdmchan->caller_data.dnis.digits);
@@ -779,6 +779,9 @@ static void *ftdm_analog_channel_run(ftdm_thread_t *me, void *obj)
 			case FTDM_CHANNEL_STATE_GET_CALLERID:
 				{
 					memset(&ftdmchan->caller_data, 0, sizeof(ftdmchan->caller_data));
+					ftdm_log_chan_msg(ftdmchan, FTDM_LOG_DEBUG, "Initializing cid data!\n");
+					ftdm_set_string(ftdmchan->caller_data.ani.digits, "unknown");
+					ftdm_set_string(ftdmchan->caller_data.cid_name, ftdmchan->caller_data.ani.digits);
 					ftdm_channel_command(ftdmchan, FTDM_COMMAND_ENABLE_CALLERID_DETECT, NULL);
 					continue;
 				}

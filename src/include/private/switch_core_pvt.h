@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -98,7 +98,8 @@ typedef enum {
 	SSF_READ_TRANSCODE = (1 << 5),
 	SSF_WRITE_TRANSCODE = (1 << 6),
 	SSF_READ_CODEC_RESET = (1 << 7),
-	SSF_WRITE_CODEC_RESET = (1 << 8)
+	SSF_WRITE_CODEC_RESET = (1 << 8),
+	SSF_DESTROYABLE = (1 << 9)
 } switch_session_flag_t;
 
 
@@ -120,6 +121,7 @@ struct switch_core_session {
 	switch_codec_t *video_write_codec;
 
 	switch_codec_implementation_t read_impl;
+	switch_codec_implementation_t real_read_impl;
 	switch_codec_implementation_t write_impl;
 	switch_codec_implementation_t video_read_impl;
 	switch_codec_implementation_t video_write_impl;
@@ -171,6 +173,8 @@ struct switch_core_session {
 	uint32_t soft_lock;
 	switch_ivr_dmachine_t *dmachine[2];
 	plc_state_t *plc;
+	uint8_t recur_buffer[SWITCH_RECOMMENDED_BUFFER_SIZE];
+	switch_size_t recur_buffer_len;
 };
 
 struct switch_media_bug {
@@ -199,6 +203,7 @@ struct switch_media_bug {
 	uint32_t record_pre_buffer_count;
 	uint32_t record_pre_buffer_max;
 	switch_frame_t *ping_frame;
+	switch_frame_t *read_demux_frame;
 	struct switch_media_bug *next;
 };
 
@@ -240,8 +245,6 @@ struct switch_runtime {
 	char dummy_data[5];
 	switch_bool_t colorize_console;
 	char *odbc_dsn;
-	char *odbc_user;
-	char *odbc_pass;
 	char *dbname;
 	uint32_t debug_level;
 	uint32_t runlevel;
@@ -251,8 +254,6 @@ struct switch_runtime {
 	switch_profile_timer_t *profile_timer;
 	double profile_time;
 	double min_idle_time;
-	int sql_buffer_len;
-	int max_sql_buffer_len;
 	switch_dbtype_t odbc_dbtype;
 	char hostname[256];
 	char *switchname;
@@ -261,6 +262,10 @@ struct switch_runtime {
 	uint32_t db_handle_timeout;
 	int cpu_count;
 	uint32_t time_sync;
+	char *core_db_pre_trans_execute;
+	char *core_db_post_trans_execute;
+	char *core_db_inner_pre_trans_execute;
+	char *core_db_inner_post_trans_execute;
 };
 
 extern struct switch_runtime runtime;
@@ -272,6 +277,13 @@ struct switch_session_manager {
 	uint32_t session_count;
 	uint32_t session_limit;
 	switch_size_t session_id;
+	switch_queue_t *thread_queue;
+	switch_thread_t *manager_thread;
+	switch_mutex_t *mutex;
+	int ready;
+	int running;
+	int busy;
+	int popping;
 };
 
 extern struct switch_session_manager session_manager;

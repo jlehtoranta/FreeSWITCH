@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -512,6 +512,7 @@ static switch_status_t do_chat_send(switch_event_t *message_event)
 	switch_chat_interface_t *ci;
 	switch_status_t status = SWITCH_STATUS_FALSE;
 	switch_hash_index_t *hi;
+	switch_event_t *dup = NULL;
 	const void *var;
 	void *val;
 	const char *proto;
@@ -563,12 +564,21 @@ static switch_status_t do_chat_send(switch_event_t *message_event)
 			if ((ci = (switch_chat_interface_t *) val)) {
 				if (ci->chat_send && !strncasecmp(ci->interface_name, "GLOBAL_", 7)) {
 					status = ci->chat_send(message_event);
-
-					if (status == SWITCH_STATUS_BREAK) {
+					if (status == SWITCH_STATUS_SUCCESS) {
+						/* The event was handled by an extension in the chatplan, 
+						 * so the event will be duplicated, modified and queued again, 
+						 * but it won't be processed by the chatplan again.
+						 * So this copy of the event can be destroyed by the caller.
+						 */ 
+						switch_mutex_unlock(loadable_modules.mutex);
+						return SWITCH_STATUS_SUCCESS;
+					} else if (status == SWITCH_STATUS_BREAK) {
+						/* The event went through the chatplan, but no extension matched
+						 * to handle the sms messsage. It'll be attempted to be delivered
+						 * directly, and unless that works the sms delivery will have failed.
+						 */
 						do_skip = 1;
-					}
-					
-					if (status != SWITCH_STATUS_SUCCESS && status != SWITCH_STATUS_BREAK) {
+					} else {
 						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Chat Interface Error [%s]!\n", dest_proto);
 						break;
 					}
@@ -588,28 +598,37 @@ static switch_status_t do_chat_send(switch_event_t *message_event)
 		}
 	}
 
-	if (status != SWITCH_STATUS_SUCCESS) {
-		switch_event_t *dup;
-		switch_event_dup(&dup, message_event);
-		switch_event_add_header_string(dup, SWITCH_STACK_BOTTOM, "Delivery-Failure", "true");
-		switch_event_fire(&dup);
+
+	switch_event_dup(&dup, message_event);
+
+	if ( switch_true(switch_event_get_header(message_event, "blocking")) ) {
+		if (status == SWITCH_STATUS_SUCCESS) {
+			switch_event_add_header_string(dup, SWITCH_STACK_BOTTOM, "Delivery-Failure", "false");
+		} else {
+			switch_event_add_header_string(dup, SWITCH_STACK_BOTTOM, "Delivery-Failure", "true");
+		}
+	} else {
+		switch_event_add_header_string(dup, SWITCH_STACK_BOTTOM, "Nonblocking-Delivery", "true");
 	}
 
-
+	switch_event_fire(&dup);
 	return status;
 }
 
-static void chat_process_event(switch_event_t **eventp)
+static switch_status_t chat_process_event(switch_event_t **eventp)
 {
 	switch_event_t *event;
+	switch_status_t status;
 
 	switch_assert(eventp);
 
 	event = *eventp;
 	*eventp = NULL;
 
-	do_chat_send(event);
+	status = do_chat_send(event);
 	switch_event_destroy(&event);
+
+	return status;
 }
 
 
@@ -654,7 +673,6 @@ static void chat_thread_start(int idx)
 
 				switch_threadattr_create(&thd_attr, chat_globals.pool);
 				switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
-				//switch_threadattr_priority_increase(thd_attr);
 				switch_thread_create(&chat_globals.msg_queue_thread[i], 
 									 thd_attr, 
 									 chat_thread_run, 
@@ -743,7 +761,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_execute_chat_app(switch_event_t *mes
 
 
 SWITCH_DECLARE(switch_status_t) switch_core_chat_send_args(const char *dest_proto, const char *proto, const char *from, const char *to,
-														   const char *subject, const char *body, const char *type, const char *hint)
+														   const char *subject, const char *body, const char *type, const char *hint, switch_bool_t blocking)
 {
 	switch_event_t *message_event;
 	switch_status_t status;
@@ -756,6 +774,9 @@ SWITCH_DECLARE(switch_status_t) switch_core_chat_send_args(const char *dest_prot
 		switch_event_add_header_string(message_event, SWITCH_STACK_BOTTOM, "type", type);
 		switch_event_add_header_string(message_event, SWITCH_STACK_BOTTOM, "hint", hint);
 		switch_event_add_header_string(message_event, SWITCH_STACK_BOTTOM, "skip_global_process", "true");
+		if (blocking) {
+			switch_event_add_header_string(message_event, SWITCH_STACK_BOTTOM, "blocking", "true");
+		}
 		
 		if (body) {
 			switch_event_add_body(message_event, "%s", body);
@@ -768,8 +789,13 @@ SWITCH_DECLARE(switch_status_t) switch_core_chat_send_args(const char *dest_prot
 		switch_event_add_header_string(message_event, SWITCH_STACK_BOTTOM, "dest_proto", dest_proto);
 	}
 
-	chat_queue_message(&message_event);
-	status = SWITCH_STATUS_SUCCESS;
+	
+	if (blocking) {
+		status = chat_process_event(&message_event);
+	} else {
+		chat_queue_message(&message_event);
+		status = SWITCH_STATUS_SUCCESS;
+	}
 
 	return status;
 	
@@ -1209,7 +1235,11 @@ static switch_status_t switch_loadable_module_load_file(char *path, char *filena
 #ifdef WIN32
 	dso = switch_dso_open("FreeSwitch.dll", load_global, &derr);
 #elif defined (MACOSX) || defined(DARWIN)
-	dso = switch_dso_open(SWITCH_PREFIX_DIR "/lib/libfreeswitch.dylib", load_global, &derr);
+	{
+		char *lib_path = switch_mprintf("%s/libfreeswitch.dylib", SWITCH_GLOBAL_dirs.lib_dir);
+		dso = switch_dso_open(lib_path, load_global, &derr);
+		switch_safe_free(lib_path);
+	}
 #else
 	dso = switch_dso_open(NULL, load_global, &derr);
 #endif
@@ -1752,8 +1782,8 @@ SWITCH_DECLARE(switch_status_t) switch_loadable_module_init(switch_bool_t autolo
 
 	switch_loadable_module_runtime();
 
-	chat_globals.running = 1;
 	memset(&chat_globals, 0, sizeof(chat_globals));
+	chat_globals.running = 1;
 	chat_globals.pool = loadable_modules.pool;
 	switch_mutex_init(&chat_globals.mutex, SWITCH_MUTEX_NESTED, chat_globals.pool);
 
@@ -1981,6 +2011,10 @@ static void switch_loadable_module_sort_codecs(const switch_codec_implementation
 
 	for (i = 0; i < arraylen; i++) {
 		int this_ptime = array[i]->microseconds_per_packet / 1000;
+		
+		if (!strcasecmp(array[i]->iananame, "ilbc")) {
+			this_ptime = 20;
+		}
 
 		if (!sorted_ptime) {
 			sorted_ptime = this_ptime;
@@ -1998,6 +2032,10 @@ static void switch_loadable_module_sort_codecs(const switch_codec_implementation
 #endif
 			for(j = i; j < arraylen; j++) {
 				int check_ptime = array[j]->microseconds_per_packet / 1000;
+
+				if (!strcasecmp(array[i]->iananame, "ilbc")) {
+					check_ptime = 20;
+				}
 
 				if (check_ptime == sorted_ptime) {
 #ifdef DEBUG_CODEC_SORTING
@@ -2067,41 +2105,81 @@ SWITCH_DECLARE(int) switch_loadable_module_get_codecs(const switch_codec_impleme
 
 }
 
+SWITCH_DECLARE(char *) switch_parse_codec_buf(char *buf, uint32_t *interval, uint32_t *rate, uint32_t *bit)
+{
+	char *cur, *next = NULL, *name, *p;
+
+	name = next = cur = buf;
+
+	for (;;) {
+		if (!next) {
+			break;
+		}
+
+		if ((p = strchr(next, '@'))) {
+			*p++ = '\0';
+		}
+		next = p;
+
+		if (cur != name) {
+			if (strchr(cur, 'i')) {
+				*interval = atoi(cur);
+			} else if ((strchr(cur, 'k') || strchr(cur, 'h'))) {
+				*rate = atoi(cur);
+			} else if (strchr(cur, 'b')) {
+				*bit = atoi(cur);
+			} else {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Bad syntax for codec string. Missing qualifier [h|k|i|b] for part [%s]!\n", cur);
+			}
+		}
+		cur = next;
+	}
+	
+	return name;
+}
+
 SWITCH_DECLARE(int) switch_loadable_module_get_codecs_sorted(const switch_codec_implementation_t **array, int arraylen, char **prefs, int preflen)
 {
-	int x, i = 0;
+	int x, i = 0, j = 0;
 	switch_codec_interface_t *codec_interface;
 	const switch_codec_implementation_t *imp;
 
 	switch_mutex_lock(loadable_modules.mutex);
 
 	for (x = 0; x < preflen; x++) {
-		char *cur, *next = NULL, *name, *p, buf[256];
+		char *name, buf[256], jbuf[256];
 		uint32_t interval = 0, rate = 0, bit = 0;
 
 		switch_copy_string(buf, prefs[x], sizeof(buf));
-		name = next = cur = buf;
+		name = switch_parse_codec_buf(buf, &interval, &rate, &bit);
 
-		for (;;) {
-			if (!next) {
-				break;
+		for(j = 0; j < x; j++) {
+			char *jname;
+			uint32_t jinterval = 0, jrate = 0, jbit = 0;
+			uint32_t ointerval = interval, orate = rate;
+
+			if (ointerval == 0) {
+				ointerval = switch_default_ptime(name, 0);
+			}
+			
+			if (orate == 0) {
+				orate = 8000;
 			}
 
-			if ((p = strchr(next, '@'))) {
-				*p++ = '\0';
-			}
-			next = p;
+			switch_copy_string(jbuf, prefs[j], sizeof(jbuf));
+			jname = switch_parse_codec_buf(jbuf, &jinterval, &jrate, &jbit);
 
-			if (cur != name) {
-				if (strchr(cur, 'i')) {
-					interval = atoi(cur);
-				} else if ((strchr(cur, 'k') || strchr(cur, 'h'))) {
-					rate = atoi(cur);
-				} else if (strchr(cur, 'b')) {
-					bit = atoi(cur);
-				}
+			if (jinterval == 0) {
+				jinterval = switch_default_ptime(jname, 0);
 			}
-			cur = next;
+
+			if (jrate == 0) {
+				jrate = 8000;
+			}
+
+			if (!strcasecmp(name, jname) && ointerval == jinterval && orate == jrate) {
+				goto next_x;
+			}
 		}
 
 		if ((codec_interface = switch_loadable_module_get_codec_interface(name)) != 0) {
@@ -2164,6 +2242,10 @@ SWITCH_DECLARE(int) switch_loadable_module_get_codecs_sorted(const switch_codec_
 			}
 
 		}
+
+	next_x:
+
+		continue;
 	}
 
 	switch_mutex_unlock(loadable_modules.mutex);
@@ -2198,10 +2280,10 @@ SWITCH_DECLARE(switch_status_t) switch_api_execute(const char *cmd, const char *
 	}
 
 	if (stream->param_event) {
-		if (cmd_used) {
+		if (cmd_used && *cmd_used) {
 			switch_event_add_header_string(stream->param_event, SWITCH_STACK_BOTTOM, "API-Command", cmd_used);
 		}
-		if (arg_used) {
+		if (arg_used && *arg_used) {
 			switch_event_add_header_string(stream->param_event, SWITCH_STACK_BOTTOM, "API-Command-Argument", arg_used);
 		}
 	}

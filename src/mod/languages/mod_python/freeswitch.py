@@ -52,6 +52,7 @@ setGlobalVariable = _freeswitch.setGlobalVariable
 getGlobalVariable = _freeswitch.getGlobalVariable
 consoleLog = _freeswitch.consoleLog
 consoleCleanLog = _freeswitch.consoleCleanLog
+running = _freeswitch.running
 email = _freeswitch.email
 class IVRMenu(_object):
     __swig_setmethods__ = {}
@@ -226,6 +227,7 @@ class EventConsumer(_object):
     __del__ = lambda self : None;
     def bind(*args): return _freeswitch.EventConsumer_bind(*args)
     def pop(*args): return _freeswitch.EventConsumer_pop(*args)
+    def cleanup(*args): return _freeswitch.EventConsumer_cleanup(*args)
 EventConsumer_swigregister = _freeswitch.EventConsumer_swigregister
 EventConsumer_swigregister(EventConsumer)
 

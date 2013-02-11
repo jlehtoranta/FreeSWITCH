@@ -38,9 +38,9 @@ modem control commands.
 
 typedef struct at_state_s at_state_t;
 
-typedef int (at_modem_control_handler_t)(at_state_t *s, void *user_data, int op, const char *num);
-typedef int (at_tx_handler_t)(at_state_t *s, void *user_data, const uint8_t *buf, size_t len);
-typedef int (at_class1_handler_t)(at_state_t *s, void *user_data, int direction, int operation, int val);
+typedef int (*at_modem_control_handler_t)(at_state_t *s, void *user_data, int op, const char *num);
+typedef int (*at_tx_handler_t)(at_state_t *s, void *user_data, const uint8_t *buf, size_t len);
+typedef int (*at_class1_handler_t)(at_state_t *s, void *user_data, int direction, int operation, int val);
 
 enum at_rx_mode_e
 {
@@ -136,6 +136,10 @@ extern "C"
 {
 #endif
 
+SPAN_DECLARE(const char *) at_call_state_to_str(int state);
+
+SPAN_DECLARE(const char *) at_modem_control_to_str(int state);
+
 SPAN_DECLARE(void) at_set_at_rx_mode(at_state_t *s, int new_mode);
 
 SPAN_DECLARE(void) at_put_response(at_state_t *s, const char *t);
@@ -163,6 +167,12 @@ SPAN_DECLARE(void) at_interpreter(at_state_t *s, const char *cmd, int len);
 
 SPAN_DECLARE(void) at_set_class1_handler(at_state_t *s, at_class1_handler_t handler, void *user_data);
 
+/*! Get the logging context associated with an AT interpreter context.
+    \brief Get the logging context associated with an AT interpreter context.
+    \param s The AT context.
+    \return A pointer to the logging context */
+SPAN_DECLARE(logging_state_t *) at_get_logging_state(at_state_t *s);
+
 /*! Initialise an AT interpreter context.
     \brief Initialise an AT interpreter context.
     \param s The AT context.
@@ -172,9 +182,9 @@ SPAN_DECLARE(void) at_set_class1_handler(at_state_t *s, at_class1_handler_t hand
     \param modem_control_user_data x.
     \return A pointer to the AT context, or NULL if there was a problem. */
 SPAN_DECLARE(at_state_t *) at_init(at_state_t *s,
-                                   at_tx_handler_t *at_tx_handler,
+                                   at_tx_handler_t at_tx_handler,
                                    void *at_tx_user_data,
-                                   at_modem_control_handler_t *modem_control_handler,
+                                   at_modem_control_handler_t modem_control_handler,
                                    void *modem_control_user_data);
 
 /*! Release an AT interpreter context.

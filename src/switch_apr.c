@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -614,9 +614,34 @@ SWITCH_DECLARE(const char *) switch_dir_next_file(switch_dir_t *thedir, char *bu
 
 /* thread stubs */
 
+#ifndef WIN32
+struct apr_threadattr_t {
+	apr_pool_t *pool;
+	pthread_attr_t attr;
+	int priority;
+};
+#else
+/* this needs to be revisited when apr for windows supports thread priority settings */
+/* search for WIN32 in this file */
+struct apr_threadattr_t {
+    apr_pool_t *pool;
+    apr_int32_t detach;
+    apr_size_t stacksize;
+};
+#endif
+
+
 SWITCH_DECLARE(switch_status_t) switch_threadattr_create(switch_threadattr_t ** new_attr, switch_memory_pool_t *pool)
 {
-	return apr_threadattr_create(new_attr, pool);
+	switch_status_t status;
+
+	if ((status = apr_threadattr_create(new_attr, pool)) == SWITCH_STATUS_SUCCESS) {
+#ifndef WIN32
+		(*new_attr)->priority = SWITCH_PRI_LOW;
+#endif
+	}
+
+	return status;
 }
 
 SWITCH_DECLARE(switch_status_t) switch_threadattr_detach_set(switch_threadattr_t *attr, int32_t on)
@@ -629,29 +654,12 @@ SWITCH_DECLARE(switch_status_t) switch_threadattr_stacksize_set(switch_threadatt
 	return apr_threadattr_stacksize_set(attr, stacksize);
 }
 
-#ifndef WIN32
-struct apr_threadattr_t {
-	apr_pool_t *pool;
-	pthread_attr_t attr;
-};
-#endif
-
-SWITCH_DECLARE(switch_status_t) switch_threadattr_priority_increase(switch_threadattr_t *attr)
+SWITCH_DECLARE(switch_status_t) switch_threadattr_priority_set(switch_threadattr_t *attr, switch_thread_priority_t priority)
 {
-	int stat = 0;
 #ifndef WIN32
-	struct sched_param param;
-	struct apr_threadattr_t *myattr = attr;
-
-	pthread_attr_getschedparam(&myattr->attr, &param);
-	param.sched_priority = 1;
-	stat = pthread_attr_setschedparam(&myattr->attr, &param);
-
-	if (stat == 0) {
-		return SWITCH_STATUS_SUCCESS;
-	}
+	attr->priority = priority;
 #endif
-	return stat;
+	return SWITCH_STATUS_SUCCESS;
 }
 
 static char TT_KEY[] = "1";
@@ -664,6 +672,11 @@ SWITCH_DECLARE(switch_status_t) switch_thread_create(switch_thread_t ** new_thre
 }
 
 /* socket stubs */
+
+SWITCH_DECLARE(switch_status_t) switch_os_sock_get(switch_os_socket_t *thesock, switch_socket_t *sock)
+{
+	return apr_os_sock_get(thesock, sock);
+}
 
 SWITCH_DECLARE(switch_status_t) switch_socket_addr_get(switch_sockaddr_t ** sa, switch_bool_t remote, switch_socket_t *sock)
 {
@@ -1169,6 +1182,11 @@ SWITCH_DECLARE(switch_status_t) switch_thread_exit(switch_thread_t *thd, switch_
  */
 SWITCH_DECLARE(switch_status_t) switch_thread_join(switch_status_t *retval, switch_thread_t *thd)
 {
+	if ( !thd ) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "ERROR: Attempting to join thread that does not exist\n");
+		return SWITCH_STATUS_FALSE;
+	}
+
 	return apr_thread_join((apr_status_t *) retval, (apr_thread_t *) thd);
 }
 
@@ -1223,6 +1241,10 @@ SWITCH_DECLARE(int) switch_atomic_dec(volatile switch_atomic_t *mem)
 #endif
 }
 
+SWITCH_DECLARE(char *) switch_strerror(switch_status_t statcode, char *buf, switch_size_t bufsize)
+{
+       return apr_strerror(statcode, buf, bufsize);
+}
 
 /* For Emacs:
  * Local Variables:

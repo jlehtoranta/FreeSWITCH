@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, Anthony Minessale II
+ * Copyright (c) 2007-2012, Anthony Minessale II
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -162,8 +162,10 @@ typedef enum {
 	FTDM_SIGTYPE_ANALOG,
 	FTDM_SIGTYPE_SANGOMABOOST,
 	FTDM_SIGTYPE_M3UA,
+	FTDM_SIGTYPE_M2UA,
 	FTDM_SIGTYPE_R2,
-	FTDM_SIGTYPE_SS7
+	FTDM_SIGTYPE_SS7,
+	FTDM_SIGTYPE_GSM
 } ftdm_signal_type_t;
 
 typedef enum {
@@ -173,6 +175,12 @@ typedef enum {
 	FTDM_SPAN_SUSPENDED = (1 << 3),
 	FTDM_SPAN_IN_THREAD = (1 << 4),
 	FTDM_SPAN_STOP_THREAD = (1 << 5),
+	/*! Signaling modules set this flag to use fchan->pendingchans queue instead
+	 *  of the FTDM_SPAN_STATE_CHANGE flag to detect when there is channels with
+	 *  a state change pending in the span. If you set this member you can't rely
+	 *  on FTDM_SPAN_STATE_CHANGE anymore and must use the queue only instead. This
+	 *  is the new way of detecting state changes, new modules should always set this
+	 *  flag, the old modules still relying on FTDM_SPAN_STATE_CHANGE should be updated */
 	FTDM_SPAN_USE_CHAN_QUEUE = (1 << 6),
 	FTDM_SPAN_SUGGEST_CHAN_ID = (1 << 7),
 	FTDM_SPAN_USE_AV_RATE = (1 << 8),
@@ -191,6 +199,8 @@ typedef enum {
 	FTDM_SPAN_NON_STOPPABLE = (1 << 13),
 	/* If this flag is set, then this span supports TRANSFER state */
 	FTDM_SPAN_USE_TRANSFER = (1 << 14),
+	/* This is the last flag, no more flags bigger than this */
+	FTDM_SPAN_MAX_FLAG = (1 << 15),
 } ftdm_span_flag_t;
 
 /*! \brief Channel supported features */
@@ -259,6 +269,12 @@ typedef enum {
 #define FTDM_CHANNEL_BLOCKING        (1ULL << 35)
 /*!< Media is digital */
 #define FTDM_CHANNEL_DIGITAL_MEDIA   (1ULL << 36)
+/*!< Native signaling bridge is enabled */
+#define FTDM_CHANNEL_NATIVE_SIGBRIDGE (1ULL << 37)
+
+/*!< This no more flags after this flag */
+#define FTDM_CHANNEL_MAX_FLAG 	     (1ULL << 38)
+/*!<When adding a new flag, need to update ftdm_io.c:channel_flag_strs */
 
 #include "ftdm_state.h"
 

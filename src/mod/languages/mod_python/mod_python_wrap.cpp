@@ -3133,6 +3133,19 @@ fail:
 }
 
 
+SWIGINTERN PyObject *_wrap_running(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  bool result;
+  
+  if (!PyArg_ParseTuple(args,(char *)":running")) SWIG_fail;
+  result = (bool)running();
+  resultobj = SWIG_From_bool(static_cast< bool >(result));
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
 SWIGINTERN PyObject *_wrap_email(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
   char *arg1 = (char *) 0 ;
@@ -5406,6 +5419,7 @@ SWIGINTERN PyObject *_wrap_new_EventConsumer(PyObject *SWIGUNUSEDPARM(self), PyO
   PyObject *resultobj = 0;
   char *arg1 = (char *) NULL ;
   char *arg2 = (char *) "" ;
+  int arg3 = (int) 5000 ;
   EventConsumer *result = 0 ;
   int res1 ;
   char *buf1 = 0 ;
@@ -5413,10 +5427,13 @@ SWIGINTERN PyObject *_wrap_new_EventConsumer(PyObject *SWIGUNUSEDPARM(self), PyO
   int res2 ;
   char *buf2 = 0 ;
   int alloc2 = 0 ;
+  int val3 ;
+  int ecode3 = 0 ;
   PyObject * obj0 = 0 ;
   PyObject * obj1 = 0 ;
+  PyObject * obj2 = 0 ;
   
-  if (!PyArg_ParseTuple(args,(char *)"|OO:new_EventConsumer",&obj0,&obj1)) SWIG_fail;
+  if (!PyArg_ParseTuple(args,(char *)"|OOO:new_EventConsumer",&obj0,&obj1,&obj2)) SWIG_fail;
   if (obj0) {
     res1 = SWIG_AsCharPtrAndSize(obj0, &buf1, NULL, &alloc1);
     if (!SWIG_IsOK(res1)) {
@@ -5431,7 +5448,14 @@ SWIGINTERN PyObject *_wrap_new_EventConsumer(PyObject *SWIGUNUSEDPARM(self), PyO
     }
     arg2 = reinterpret_cast< char * >(buf2);
   }
-  result = (EventConsumer *)new EventConsumer((char const *)arg1,(char const *)arg2);
+  if (obj2) {
+    ecode3 = SWIG_AsVal_int(obj2, &val3);
+    if (!SWIG_IsOK(ecode3)) {
+      SWIG_exception_fail(SWIG_ArgError(ecode3), "in method '" "new_EventConsumer" "', argument " "3"" of type '" "int""'");
+    } 
+    arg3 = static_cast< int >(val3);
+  }
+  result = (EventConsumer *)new EventConsumer((char const *)arg1,(char const *)arg2,arg3);
   resultobj = SWIG_NewPointerObj(SWIG_as_voidptr(result), SWIGTYPE_p_EventConsumer, SWIG_POINTER_NEW |  0 );
   if (alloc1 == SWIG_NEWOBJ) delete[] buf1;
   if (alloc2 == SWIG_NEWOBJ) delete[] buf2;
@@ -5551,6 +5575,27 @@ SWIGINTERN PyObject *_wrap_EventConsumer_pop(PyObject *SWIGUNUSEDPARM(self), PyO
   }
   result = (Event *)(arg1)->pop(arg2,arg3);
   resultobj = SWIG_NewPointerObj(SWIG_as_voidptr(result), SWIGTYPE_p_Event, SWIG_POINTER_OWN |  0 );
+  return resultobj;
+fail:
+  return NULL;
+}
+
+
+SWIGINTERN PyObject *_wrap_EventConsumer_cleanup(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
+  PyObject *resultobj = 0;
+  EventConsumer *arg1 = (EventConsumer *) 0 ;
+  void *argp1 = 0 ;
+  int res1 = 0 ;
+  PyObject * obj0 = 0 ;
+  
+  if (!PyArg_ParseTuple(args,(char *)"O:EventConsumer_cleanup",&obj0)) SWIG_fail;
+  res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_EventConsumer, 0 |  0 );
+  if (!SWIG_IsOK(res1)) {
+    SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "EventConsumer_cleanup" "', argument " "1"" of type '" "EventConsumer *""'"); 
+  }
+  arg1 = reinterpret_cast< EventConsumer * >(argp1);
+  (arg1)->cleanup();
+  resultobj = SWIG_Py_Void();
   return resultobj;
 fail:
   return NULL;
@@ -9158,6 +9203,7 @@ static PyMethodDef SwigMethods[] = {
 	 { (char *)"getGlobalVariable", _wrap_getGlobalVariable, METH_VARARGS, NULL},
 	 { (char *)"consoleLog", _wrap_consoleLog, METH_VARARGS, NULL},
 	 { (char *)"consoleCleanLog", _wrap_consoleCleanLog, METH_VARARGS, NULL},
+	 { (char *)"running", _wrap_running, METH_VARARGS, NULL},
 	 { (char *)"email", _wrap_email, METH_VARARGS, NULL},
 	 { (char *)"new_IVRMenu", _wrap_new_IVRMenu, METH_VARARGS, NULL},
 	 { (char *)"delete_IVRMenu", _wrap_delete_IVRMenu, METH_VARARGS, NULL},
@@ -9231,6 +9277,7 @@ static PyMethodDef SwigMethods[] = {
 	 { (char *)"delete_EventConsumer", _wrap_delete_EventConsumer, METH_VARARGS, NULL},
 	 { (char *)"EventConsumer_bind", _wrap_EventConsumer_bind, METH_VARARGS, NULL},
 	 { (char *)"EventConsumer_pop", _wrap_EventConsumer_pop, METH_VARARGS, NULL},
+	 { (char *)"EventConsumer_cleanup", _wrap_EventConsumer_cleanup, METH_VARARGS, NULL},
 	 { (char *)"EventConsumer_swigregister", EventConsumer_swigregister, METH_VARARGS, NULL},
 	 { (char *)"delete_CoreSession", _wrap_delete_CoreSession, METH_VARARGS, NULL},
 	 { (char *)"CoreSession_session_set", _wrap_CoreSession_session_set, METH_VARARGS, NULL},

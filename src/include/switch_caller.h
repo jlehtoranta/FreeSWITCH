@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -115,6 +115,7 @@ typedef struct profile_node_s {
 	struct switch_caller_profile *origination_caller_profile;
 	struct switch_caller_profile *hunt_caller_profile;
 	struct switch_channel_timetable *times;
+	struct switch_channel_timetable *old_times;
 	struct switch_caller_extension *caller_extension;
 	switch_memory_pool_t *pool;
 	struct switch_caller_profile *next;

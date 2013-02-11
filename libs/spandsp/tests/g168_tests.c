@@ -34,10 +34,6 @@
 #include <string.h>
 #include <sndfile.h>
 
-//#if defined(WITH_SPANDSP_INTERNALS)
-#define SPANDSP_EXPOSE_INTERNAL_STRUCTURES
-//#endif
-
 #include "spandsp.h"
 #include "spandsp/g168models.h"
 #include "spandsp-sim.h"
@@ -316,7 +312,7 @@ int main(int argc, char *argv[])
         printf("%d\n", css_c3[i]);
     signal_free(&local_css);
     signal_free(&far_css);
-    return  0;
+    return 0;
 }
 /*- End of function --------------------------------------------------------*/
 /*- End of file ------------------------------------------------------------*/

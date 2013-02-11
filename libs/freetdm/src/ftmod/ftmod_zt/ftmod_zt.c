@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, Anthony Minessale II
+ * Copyright (c) 2007-2012, Anthony Minessale II
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -102,6 +102,7 @@ struct ioctl_codes {
     ioctlcmd SETTXBITS;
     ioctlcmd GETRXBITS;
     ioctlcmd SETPOLARITY;
+    ioctlcmd TONEDETECT;
 };
 
 /**
@@ -139,7 +140,8 @@ static struct ioctl_codes zt_ioctl_codes = {
     .GETCONFMUTE = ZT_GETCONFMUTE,
     .ECHOTRAIN = ZT_ECHOTRAIN,
     .SETTXBITS = ZT_SETTXBITS,
-    .GETRXBITS = ZT_GETRXBITS
+    .GETRXBITS = ZT_GETRXBITS,
+    .TONEDETECT = ZT_TONEDETECT,
 };
 
 /**
@@ -178,7 +180,8 @@ static struct ioctl_codes dahdi_ioctl_codes = {
     .ECHOTRAIN = DAHDI_ECHOTRAIN,
     .SETTXBITS = DAHDI_SETTXBITS,
     .GETRXBITS = DAHDI_GETRXBITS,
-    .SETPOLARITY = DAHDI_SETPOLARITY
+    .SETPOLARITY = DAHDI_SETPOLARITY,
+    .TONEDETECT = DAHDI_TONEDETECT,
 };
 
 #define ZT_INVALID_SOCKET -1
@@ -271,6 +274,7 @@ static unsigned zt_open_range(ftdm_span_t *span, unsigned start, unsigned end, f
 {
 	unsigned configured = 0, x;
 	zt_params_t ztp;
+	zt_tone_mode_t mode = 0;
 
 	memset(&ztp, 0, sizeof(ztp));
 
@@ -361,7 +365,7 @@ static unsigned zt_open_range(ftdm_span_t *span, unsigned start, unsigned end, f
 				cc.sigtype = ZT_SIG_CAS;
 				cc.idlebits = cas_bits;
 				if (ioctl(CONTROL_FD, codes.CHANCONFIG, &cc)) {
-					ftdm_log(FTDM_LOG_ERROR, "failure configuring device %s as FreeTDM device %d:%d fd:%d err:%s", chanpath, ftdmchan->span_id, ftdmchan->chan_id, sockfd, strerror(errno));
+					ftdm_log(FTDM_LOG_ERROR, "failure configuring device %s as FreeTDM device %d:%d fd:%d err:%s\n", chanpath, ftdmchan->span_id, ftdmchan->chan_id, sockfd, strerror(errno));
 					close(sockfd);
 					continue;
 				}
@@ -436,12 +440,23 @@ static unsigned zt_open_range(ftdm_span_t *span, unsigned start, unsigned end, f
 				continue;
 			}
 
+			mode = ZT_TONEDETECT_ON | ZT_TONEDETECT_MUTE;
+			if (ioctl(sockfd, codes.TONEDETECT, &mode)) {
+				ftdm_log(FTDM_LOG_DEBUG, "HW DTMF not available on FreeTDM device %d:%d fd:%d\n", ftdmchan->span_id, ftdmchan->chan_id, sockfd);
+			} else {
+				ftdm_log(FTDM_LOG_DEBUG, "HW DTMF available on FreeTDM device %d:%d fd:%d\n", ftdmchan->span_id, ftdmchan->chan_id, sockfd);
+				ftdm_channel_set_feature(ftdmchan, FTDM_CHANNEL_FEATURE_DTMF_DETECT);
+				mode = 0;
+				ioctl(sockfd, codes.TONEDETECT, &mode);
+			}
+
 			if (!ftdm_strlen_zero(name)) {
 				ftdm_copy_string(ftdmchan->chan_name, name, sizeof(ftdmchan->chan_name));
 			}
 			if (!ftdm_strlen_zero(number)) {
 				ftdm_copy_string(ftdmchan->chan_number, number, sizeof(ftdmchan->chan_number));
 			}
+
 			configured++;
 		} else {
 			ftdm_log(FTDM_LOG_ERROR, "failure configuring device %s\n", chanpath);
@@ -561,7 +576,7 @@ static FIO_CONFIGURE_FUNCTION(zt_configure)
 			}
 		} else if (!strcasecmp(var, "echo_cancel_level")) {
 			num = atoi(val);
-			if (num < 0 || num > 256) {
+			if (num < 0 || num > 1024) {
 				ftdm_log(FTDM_LOG_WARNING, "invalid echo can val at line %d\n", lineno);
 			} else {
 				zt_globals.eclevel = num;
@@ -666,7 +681,6 @@ static FIO_OPEN_FUNCTION(zt_open)
 				}
 			}
 		}
-
 	}
 	return FTDM_SUCCESS;
 }
@@ -737,6 +751,7 @@ static FIO_COMMAND_FUNCTION(zt_command)
 				ftdm_log_chan_msg(ftdmchan, FTDM_LOG_ERROR, "OFFHOOK Failed");
 				return FTDM_FAIL;
 			}
+			ftdm_log_chan_msg(ftdmchan, FTDM_LOG_DEBUG, "Channel is now offhook\n");
 			ftdm_set_flag_locked(ftdmchan, FTDM_CHANNEL_OFFHOOK);
 		}
 		break;
@@ -747,6 +762,7 @@ static FIO_COMMAND_FUNCTION(zt_command)
 				ftdm_log_chan_msg(ftdmchan, FTDM_LOG_ERROR, "ONHOOK Failed");
 				return FTDM_FAIL;
 			}
+			ftdm_log_chan_msg(ftdmchan, FTDM_LOG_DEBUG, "Channel is now onhook\n");
 			ftdm_clear_flag_locked(ftdmchan, FTDM_CHANNEL_OFFHOOK);
 		}
 		break;
@@ -856,6 +872,24 @@ static FIO_COMMAND_FUNCTION(zt_command)
 			err = ioctl(ftdmchan->sockfd, codes.FLUSH, &flushmode);
 		}
 		break;
+	case FTDM_COMMAND_SET_RX_QUEUE_SIZE:
+	case FTDM_COMMAND_SET_TX_QUEUE_SIZE:
+		/* little white lie ... eventually we can implement this, in the meantime, not worth the effort
+		   and this is only used by some sig modules such as ftmod_r2 to behave bettter under load */
+		err = 0;
+		break;
+	case FTDM_COMMAND_ENABLE_DTMF_DETECT:
+		{
+			zt_tone_mode_t mode = ZT_TONEDETECT_ON | ZT_TONEDETECT_MUTE;
+			err = ioctl(ftdmchan->sockfd, codes.TONEDETECT, &mode);
+		}
+		break;
+	case FTDM_COMMAND_DISABLE_DTMF_DETECT:
+		{
+			zt_tone_mode_t mode = 0;
+			err = ioctl(ftdmchan->sockfd, codes.TONEDETECT, &mode);
+		}
+		break;
 	default:
 		err = FTDM_NOTIMPL;
 		break;
@@ -947,7 +981,7 @@ pollagain:
 	pfds[0].fd = ftdmchan->sockfd;
 	pfds[0].events = inflags;
 	result = poll(pfds, 1, to);
-	*flags = 0;
+	*flags = FTDM_NO_FLAGS;
 
 	if (result < 0 && errno == EINTR) {
 		ftdm_log_chan_msg(ftdmchan, FTDM_LOG_DEBUG, "DAHDI wait got interrupted, trying again\n");
@@ -962,8 +996,6 @@ pollagain:
 	if (result > 0) {
 		inflags = pfds[0].revents;
 	}
-
-	*flags = FTDM_NO_FLAGS;
 
 	if (result < 0){
 		snprintf(ftdmchan->last_error, sizeof(ftdmchan->last_error), "Poll failed");
@@ -1040,6 +1072,23 @@ FIO_SPAN_POLL_EVENT_FUNCTION(zt_poll_event)
 	return k ? FTDM_SUCCESS : FTDM_FAIL;
 }
 
+static __inline__ int handle_dtmf_event(ftdm_channel_t *fchan, zt_event_t zt_event_id)
+{
+	if ((zt_event_id & ZT_EVENT_DTMFUP)) {
+		int digit = (zt_event_id & (~ZT_EVENT_DTMFUP));
+		char tmp_dtmf[2] = { digit, 0 };
+		ftdm_log_chan(fchan, FTDM_LOG_DEBUG, "DTMF UP [%d]\n", digit);
+		ftdm_channel_queue_dtmf(fchan, tmp_dtmf);
+		return 0;
+	} else if ((zt_event_id & ZT_EVENT_DTMFDOWN)) {
+		int digit = (zt_event_id & (~ZT_EVENT_DTMFDOWN));
+		ftdm_log_chan(fchan, FTDM_LOG_DEBUG, "DTMF DOWN [%d]\n", digit);
+		return 0;
+	} else {
+		return -1;
+	}
+}
+
 /**
  * \brief Process an event from a ftdmchan and set the proper OOB event_id. The channel must be locked.
  * \param fchan Channel to retrieve event from
@@ -1049,6 +1098,7 @@ FIO_SPAN_POLL_EVENT_FUNCTION(zt_poll_event)
  */
 static __inline__ ftdm_status_t zt_channel_process_event(ftdm_channel_t *fchan, ftdm_oob_event_t *event_id, zt_event_t zt_event_id)
 {
+	ftdm_log_chan(fchan, FTDM_LOG_DEBUG, "Processing zap hardware event %d\n", zt_event_id);
 	switch(zt_event_id) {
 	case ZT_EVENT_RINGEROFF:
 		{
@@ -1083,13 +1133,30 @@ static __inline__ ftdm_status_t zt_channel_process_event(ftdm_channel_t *fchan, 
 		break;
 	case ZT_EVENT_RINGOFFHOOK:
 		{
+			*event_id = FTDM_OOB_NOOP;
 			if (fchan->type == FTDM_CHAN_TYPE_FXS || (fchan->type == FTDM_CHAN_TYPE_EM && fchan->state != FTDM_CHANNEL_STATE_UP)) {
-				ftdm_set_flag_locked(fchan, FTDM_CHANNEL_OFFHOOK);
-				*event_id = FTDM_OOB_OFFHOOK;
+				if (fchan->type != FTDM_CHAN_TYPE_EM) {
+					/* In E&M we're supposed to set this flag only when the local side goes offhook, not the remote */
+					ftdm_set_flag_locked(fchan, FTDM_CHANNEL_OFFHOOK);
+				}
+
+				/* For E&M let's count the ring count (it seems sometimes we receive RINGOFFHOOK once before the other end
+				 * answers, then another RINGOFFHOOK when the other end answers?? anyways, now we count rings before delivering the
+				 * offhook event ... the E&M signaling code in ftmod_analog_em also polls the RBS bits looking for answer, just to
+				 * be safe and not rely on this event, so even if this event does not arrive, when there is answer supervision
+				 * the analog signaling code should detect the cas persistance pattern and answer */
+				if (fchan->type == FTDM_CHAN_TYPE_EM && ftdm_test_flag(fchan, FTDM_CHANNEL_OUTBOUND)) {
+					fchan->ring_count++;
+					/* perhaps some day we'll make this configurable, but since I am not even sure what the hell is going on
+					 * no point in making a configuration option for something that may not be technically correct */
+					if (fchan->ring_count == 2) {
+						*event_id = FTDM_OOB_OFFHOOK;
+					}
+				} else {
+					*event_id = FTDM_OOB_OFFHOOK;
+				}
 			} else if (fchan->type == FTDM_CHAN_TYPE_FXO) {
 				*event_id = FTDM_OOB_RING_START;
-			} else {
-				*event_id = FTDM_OOB_NOOP;
 			}
 		}
 		break;
@@ -1146,8 +1213,12 @@ static __inline__ ftdm_status_t zt_channel_process_event(ftdm_channel_t *fchan, 
 		break;
 	default:
 		{
-			ftdm_log_chan(fchan, FTDM_LOG_WARNING, "Unhandled event %d\n", zt_event_id);
-			*event_id = FTDM_OOB_INVALID;
+			if (handle_dtmf_event(fchan, zt_event_id)) {
+				ftdm_log_chan(fchan, FTDM_LOG_WARNING, "Unhandled event %d\n", zt_event_id);
+				*event_id = FTDM_OOB_INVALID;
+			} else {
+				*event_id = FTDM_OOB_NOOP;
+			}
 		}
 		break;
 	}
@@ -1240,25 +1311,52 @@ FIO_SPAN_NEXT_EVENT_FUNCTION(zt_next_event)
 static FIO_READ_FUNCTION(zt_read)
 {
 	ftdm_ssize_t r = 0;
+	int read_errno = 0;
 	int errs = 0;
 
 	while (errs++ < 30) {
-		if ((r = read(ftdmchan->sockfd, data, *datalen)) > 0) {
+		r = read(ftdmchan->sockfd, data, *datalen);
+		if (r > 0) {
+			/* successful read, bail out now ... */
 			break;
 		}
-		else if (r == 0) {
+
+		/* Timeout ... retry after a bit */
+		if (r == 0) {
 			ftdm_sleep(10);
 			if (errs) errs--;
+			continue;
 		}
-		else {
-			if (errno == EAGAIN || errno == EINTR)
-				continue;
-			if (errno == ELAST)
-				break;
 
-			ftdm_log(FTDM_LOG_ERROR, "read failed: %s\n", strerror(errno));
+		/* This gotta be an error, save errno in case we do printf(), ioctl() or other operations which may reset it */
+		read_errno = errno;
+		if (read_errno == EAGAIN || read_errno == EINTR) {
+			/* Reasonable to retry under those errors */
+			continue;
 		}
+
+		/* When ELAST is returned, it means DAHDI has an out of band event ready and we won't be able to read anything until
+		 * we retrieve the event using an ioctl(), so we try to retrieve it here ... */
+		if (read_errno == ELAST) {
+			zt_event_t zt_event_id = 0;
+			if (ioctl(ftdmchan->sockfd, codes.GETEVENT, &zt_event_id) == -1) {
+				ftdm_log_chan(ftdmchan, FTDM_LOG_ERROR, "Failed retrieving event after ELAST on read: %s\n", strerror(errno));
+				r = -1;
+				break;
+			}
+
+			if (handle_dtmf_event(ftdmchan, zt_event_id)) {
+				/* we should enqueue this event somewhere so it can be retrieved by the user, for now, dropping it to see what it is! */
+				ftdm_log_chan(ftdmchan, FTDM_LOG_WARNING, "Event %d is not dmtf related. Skipping one media read cycle\n", zt_event_id);
+			}
+			ftdm_log_chan_msg(ftdmchan, FTDM_LOG_WARNING, "Skipping one IO read cycle due to events pending in the driver queue\n");
+			break;
+		}
+
+		/* Read error, keep going unless to many errors force us to abort ...*/
+		ftdm_log(FTDM_LOG_ERROR, "IO read failed: %s\n", strerror(read_errno));
 	}
+
 	if (r > 0) {
 		*datalen = r;
 		if (ftdmchan->type == FTDM_CHAN_TYPE_DQ921) {
@@ -1266,7 +1364,7 @@ static FIO_READ_FUNCTION(zt_read)
 		}
 		return FTDM_SUCCESS;
 	}
-	else if (errno == ELAST) {
+	else if (read_errno == ELAST) {
 		return FTDM_SUCCESS;
 	}
 	return r == 0 ? FTDM_TIMEOUT : FTDM_FAIL;
@@ -1303,8 +1401,12 @@ tryagain:
 			ftdm_log_chan(ftdmchan, FTDM_LOG_ERROR, "Failed retrieving event after ELAST on write: %s\n", strerror(errno));
 			return FTDM_FAIL;
 		}
-		/* we should enqueue this event somewhere so it can be retrieved by the user, for now, dropping it to see what it is! */
-		ftdm_log_chan(ftdmchan, FTDM_LOG_ERROR, "Dropping event %d to be able to write data\n", zt_event_id);
+
+		if (handle_dtmf_event(ftdmchan, zt_event_id)) {
+			/* we should enqueue this event somewhere so it can be retrieved by the user, for now, dropping it to see what it is! */
+			ftdm_log_chan(ftdmchan, FTDM_LOG_ERROR, "Dropping event %d to be able to write data\n", zt_event_id);
+		}
+
 		goto tryagain;
 	}
 
@@ -1320,7 +1422,6 @@ static FIO_CHANNEL_DESTROY_FUNCTION(zt_channel_destroy)
 {
 	close(ftdmchan->sockfd);
 	ftdmchan->sockfd = ZT_INVALID_SOCKET;
-
 	return FTDM_SUCCESS;
 }
 

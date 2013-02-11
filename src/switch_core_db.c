@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -176,6 +176,23 @@ SWITCH_DECLARE(void) switch_core_db_free(char *z)
 SWITCH_DECLARE(int) switch_core_db_changes(switch_core_db_t *db)
 {
 	return sqlite3_changes(db);
+}
+
+SWITCH_DECLARE(int) switch_core_db_load_extension(switch_core_db_t *db, const char *extension)
+{
+	int ret = 0;
+	char *err = NULL;
+
+	sqlite3_enable_load_extension(db, 1);
+	ret = sqlite3_load_extension(db, extension, 0, &err);
+	sqlite3_enable_load_extension(db, 0);
+
+	if (err) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "LOAD EXTENSION ERR [%s]\n", err);
+		switch_core_db_free(err);
+		err = NULL;
+	}
+	return ret;
 }
 
 SWITCH_DECLARE(switch_core_db_t *) switch_core_db_open_file(const char *filename)

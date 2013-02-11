@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005/2008, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005/2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -197,7 +197,7 @@ static switch_call_cause_t unicall_incoming_channel(zap_sigmsg_t *sigmsg, switch
 
 	*sp = NULL;
 
-	if (!(session = switch_core_session_request(openzap_endpoint_interface, SWITCH_CALL_DIRECTION_INBOUND, SOF_NONE, NULL))) {
+	if (!(session = switch_core_session_request_uuid(openzap_endpoint_interface, SWITCH_CALL_DIRECTION_INBOUND, SOF_NONE, NULL, switch_event_get_header(var_event, "origination_uuid")))) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Initialization Error!\n");
 		return ZAP_FAIL;
 	}

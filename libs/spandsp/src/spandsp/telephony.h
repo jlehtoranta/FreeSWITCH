@@ -56,16 +56,16 @@
 #define DBOV_MAX_SINE_POWER         (-3.02f)
 
 /*! \brief A handler for pure receive. The buffer cannot be altered. */
-typedef int (span_rx_handler_t)(void *s, const int16_t amp[], int len);
+typedef int (*span_rx_handler_t)(void *s, const int16_t amp[], int len);
 
 /*! \brief A handler for receive, where the buffer can be altered. */
-typedef int (span_mod_handler_t)(void *s, int16_t amp[], int len);
+typedef int (*span_mod_handler_t)(void *s, int16_t amp[], int len);
 
 /*! \brief A handler for missing receive data fill-in. */
-typedef int (span_rx_fillin_handler_t)(void *s, int len);
+typedef int (*span_rx_fillin_handler_t)(void *s, int len);
 
 /*! \brief A handler for transmit, where the buffer will be filled. */
-typedef int (span_tx_handler_t)(void *s, int16_t amp[], int max_len);
+typedef int (*span_tx_handler_t)(void *s, int16_t amp[], int max_len);
 
 #define ms_to_samples(t)            ((t)*(SAMPLE_RATE/1000))
 #define us_to_samples(t)            ((t)/(1000000/SAMPLE_RATE))
@@ -87,6 +87,16 @@ typedef int (span_tx_handler_t)(void *s, int16_t amp[], int max_len);
 #define FP_Q_3_13(x) ((int16_t) (8192.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
 #define FP_Q_2_14(x) ((int16_t) (16384.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
 #define FP_Q_1_15(x) ((int16_t) (32768.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
+
+#define FP_Q_9_7_32(x) ((int32_t) (128.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
+#define FP_Q_8_8_32(x) ((int32_t) (256.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
+#define FP_Q_7_9_32(x) ((int32_t) (512.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
+#define FP_Q_6_10_32(x) ((int32_t) (1024.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
+#define FP_Q_5_11_32(x) ((int32_t) (2048.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
+#define FP_Q_4_12_32(x) ((int32_t) (4096.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
+#define FP_Q_3_13_32(x) ((int32_t) (8192.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
+#define FP_Q_2_14_32(x) ((int32_t) (16384.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
+#define FP_Q_1_15_32(x) ((int32_t) (32768.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
 
 #define FP_Q_9_23(x) ((int32_t) (65536.0*128.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))
 #define FP_Q_8_24(x) ((int32_t) (65536.0*256.0*x + ((x >= 0.0)  ?  0.5  :  -0.5)))

@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -206,7 +206,7 @@ static switch_status_t switch_console_logger(const switch_log_node_t *node, swit
 	}
 #endif
 
-	if (level > hard_log_level) {
+	if (level > hard_log_level && (node->slevel == SWITCH_LOG_UNINIT || level > node->slevel)) {
 		return SWITCH_STATUS_SUCCESS;
 	}
 

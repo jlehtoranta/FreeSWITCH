@@ -453,7 +453,7 @@ ftdm_status_t get_calling_subaddr(ftdm_channel_t *ftdmchan, CgPtySad *cgPtySad)
 	}
 	memset(subaddress, 0, sizeof(subaddress));
 	if(cgPtySad->sadInfo.len >= sizeof(subaddress)) {
-		ftdm_log_chan(ftdmchan, FTDM_LOG_WARNING, "Calling Party Subaddress exceeds local size limit (len:%d max:%d)\n", cgPtySad->sadInfo.len, sizeof(subaddress));
+		ftdm_log_chan(ftdmchan, FTDM_LOG_WARNING, "Calling Party Subaddress exceeds local size limit (len:%d max:%"FTDM_SIZE_FMT")\n", cgPtySad->sadInfo.len, sizeof(subaddress));
 		cgPtySad->sadInfo.len = sizeof(subaddress)-1;
 	}
 		
@@ -847,6 +847,26 @@ ftdm_status_t set_calling_subaddr(ftdm_channel_t *ftdmchan, CgPtySad *cgPtySad)
 	return FTDM_SUCCESS;
 }
 
+ftdm_status_t set_called_subaddr(ftdm_channel_t *ftdmchan, CdPtySad *cdPtySad)
+{
+	const char* cld_subaddr = NULL;
+	cld_subaddr = ftdm_usrmsg_get_var(ftdmchan->usrmsg, "isdn.called_subaddr");
+	if (!ftdm_strlen_zero(cld_subaddr)) {
+		unsigned len = strlen (cld_subaddr);
+		cdPtySad->eh.pres = PRSNT_NODEF;
+		cdPtySad->typeSad.pres = 1;
+		cdPtySad->typeSad.val = 0; /* NSAP */
+		cdPtySad->oddEvenInd.pres = 1;
+		cdPtySad->oddEvenInd.val = 0;
+
+		ftdm_log_chan(ftdmchan, FTDM_LOG_DEBUG, "Sending Called Party Subaddress:%s\n", cld_subaddr);
+		cdPtySad->sadInfo.pres = 1;
+		cdPtySad->sadInfo.len = len;
+		memcpy(cdPtySad->sadInfo.val, cld_subaddr, len);
+	}
+	return FTDM_SUCCESS;
+}
+
 ftdm_status_t set_facility_ie(ftdm_channel_t *ftdmchan, FacilityStr *facilityStr)
 {
 	ftdm_status_t status;
@@ -1061,11 +1081,12 @@ ftdm_status_t set_cause_ie(ftdm_channel_t *ftdmchan, CauseDgn *causeDgn)
 
 ftdm_status_t set_chan_id_ie(ftdm_channel_t *ftdmchan, ChanId *chanId)
 {
+	sngisdn_span_data_t *signal_data = (sngisdn_span_data_t*) ftdmchan->span->signal_data;
 	sngisdn_chan_data_t *sngisdn_info = (sngisdn_chan_data_t*)ftdmchan->call_data;
 	if (!ftdmchan) {
 		return FTDM_SUCCESS;
 	}
-
+	
 	ftdm_set_flag(sngisdn_info, FLAG_SENT_CHAN_ID);
 
 	chanId->eh.pres = PRSNT_NODEF;
@@ -1084,6 +1105,12 @@ ftdm_status_t set_chan_id_ie(ftdm_channel_t *ftdmchan, ChanId *chanId)
 		chanId->infoChanSel.pres = PRSNT_NODEF;
 		chanId->infoChanSel.val = ftdmchan->physical_chan_id;
 	} else {
+		if (signal_data->nfas.trunk) {
+			chanId->intIdentPres.val = IN_IIP_EXPLICIT;
+			chanId->intIdent.pres = PRSNT_NODEF;
+			chanId->intIdent.val = signal_data->nfas.interface_id;
+		}
+
 		chanId->intType.pres = PRSNT_NODEF;
 		chanId->intType.val = IN_IT_OTHER;
 		chanId->infoChanSel.pres = PRSNT_NODEF;
@@ -1098,6 +1125,7 @@ ftdm_status_t set_chan_id_ie(ftdm_channel_t *ftdmchan, ChanId *chanId)
 		chanId->chanNmbSlotMap.len = 1;
 		chanId->chanNmbSlotMap.val[0] = ftdmchan->physical_chan_id;
 	}
+	
 	return FTDM_SUCCESS;
 }
 
@@ -1183,6 +1211,29 @@ void sngisdn_t3_timeout(void *p_sngisdn_info)
 	ftdm_mutex_unlock(ftdmchan->mutex);
 }
 
+
+void sngisdn_delayed_dl_req(void *p_signal_data)
+{
+	ftdm_signaling_status_t sigstatus = FTDM_SIG_STATE_DOWN;	
+	sngisdn_span_data_t *signal_data = (sngisdn_span_data_t *)p_signal_data;
+	ftdm_span_t *span = signal_data->ftdm_span;
+	
+	if (!signal_data->dl_request_pending) {
+		return;
+	}
+	
+	ftdm_span_get_sig_status(span, &sigstatus);
+	if (sigstatus == FTDM_SIG_STATE_UP) {
+		signal_data->dl_request_pending = 0;
+		return;
+	}
+
+	sngisdn_snd_dl_req(span->channels[1]);
+	ftdm_sched_timer(signal_data->sched, "delayed_dl_req", 4000, sngisdn_delayed_dl_req, (void*) signal_data, NULL);
+
+	return;
+}
+
 void sngisdn_restart_timeout(void *p_signal_data)
 {
 	sngisdn_span_data_t *signal_data = (sngisdn_span_data_t *)p_signal_data;
@@ -1190,7 +1241,7 @@ void sngisdn_restart_timeout(void *p_signal_data)
 	ftdm_iterator_t *chaniter = NULL;
 	ftdm_iterator_t *curr = NULL;
 
-	ftdm_log(FTDM_LOG_DEBUG, "s%d:Did not receive a RESTART from remote switch in %d ms - restarting\n", span->name, signal_data->restart_timeout);
+	ftdm_log(FTDM_LOG_DEBUG, "s%s:Did not receive a RESTART from remote switch in %d ms - restarting\n", span->name, signal_data->restart_timeout);
 
 	chaniter = ftdm_span_get_chan_iterator(span, NULL);
 	for (curr = chaniter; curr; curr = ftdm_iterator_next(curr)) {
@@ -1213,6 +1264,23 @@ void sngisdn_delayed_setup(void *p_sngisdn_info)
 
 	ftdm_mutex_lock(ftdmchan->mutex);
 	sngisdn_snd_setup(ftdmchan);
+	ftdm_mutex_unlock(ftdmchan->mutex);
+	return;
+}
+
+void sngisdn_delayed_release_nfas(void *p_sngisdn_info)
+{
+	sngisdn_chan_data_t *sngisdn_info = (sngisdn_chan_data_t*)p_sngisdn_info;
+	ftdm_channel_t *ftdmchan = sngisdn_info->ftdmchan;
+	sngisdn_span_data_t *signal_data = (sngisdn_span_data_t*) ftdmchan->span->signal_data;
+
+	ftdm_mutex_lock(ftdmchan->mutex);
+	
+	ftdm_log_chan(ftdmchan, FTDM_LOG_DEBUG, "Sending delayed RELEASE (suId:%d suInstId:%u spInstId:%u)\n",
+					signal_data->cc_id, sngisdn_info->spInstId, sngisdn_info->suInstId);
+
+	sngisdn_snd_release(ftdmchan, 0);
+
 	ftdm_mutex_unlock(ftdmchan->mutex);
 	return;
 }
@@ -1413,7 +1481,7 @@ ftdm_status_t sngisdn_show_l1_stats(ftdm_stream_handle_t *stream, ftdm_span_t *s
 	sngisdn_span_data_t *signal_data = (sngisdn_span_data_t*)span->signal_data;
 
 	memset(&sts, 0, sizeof(sts));
-	sng_isdn_phy_stats(signal_data->link_id , &sts);
+	sng_isdn_phy_stats(sngisdn_dchan(signal_data)->link_id , &sts);
 
 	stream->write_function(stream, "\n---------------------------------------------------------------------\n");
 	stream->write_function(stream, "   Span:%s", span->name);
@@ -1546,6 +1614,18 @@ void sngisdn_send_signal(sngisdn_chan_data_t *sngisdn_info, ftdm_signal_event_t 
 		sigev.ev_data.transfer_completed.response = sngisdn_info->transfer_data.response;
 	}
 	ftdm_span_send_signal(ftdmchan->span, &sigev);
+}
+
+sngisdn_span_data_t *sngisdn_dchan(sngisdn_span_data_t *signal_data)
+{
+	if (!signal_data) {
+		return NULL;
+	}
+
+	if (!signal_data->nfas.trunk) {
+		return signal_data;
+	}
+	return signal_data->nfas.trunk->dchan;
 }
 
 

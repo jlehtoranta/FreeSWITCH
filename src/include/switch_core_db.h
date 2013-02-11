@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -461,6 +461,11 @@ SWITCH_DECLARE(void) switch_core_db_free(char *z);
  * Call this routine to find the number of rows changed by the last statement.
  */
 SWITCH_DECLARE(int) switch_core_db_changes(switch_core_db_t *db);
+
+/**
+ * Call this routine to load an external extension
+ */
+SWITCH_DECLARE(int) switch_core_db_load_extension(switch_core_db_t *db, const char *extension);
 
 /** Return values for switch_core_db_exec() and switch_core_db_step()*/
 #define SWITCH_CORE_DB_OK           0	/* Successful result */

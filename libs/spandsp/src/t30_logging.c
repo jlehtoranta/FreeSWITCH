@@ -61,15 +61,10 @@
 #include "spandsp/timezone.h"
 #include "spandsp/t4_rx.h"
 #include "spandsp/t4_tx.h"
-#if defined(SPANDSP_SUPPORT_T42)  ||  defined(SPANDSP_SUPPORT_T43)  ||  defined(SPANDSP_SUPPORT_T85)
+#include "spandsp/image_translate.h"
 #include "spandsp/t81_t82_arith_coding.h"
-#endif
-#if defined(SPANDSP_SUPPORT_T85)
 #include "spandsp/t85.h"
-#endif
-#if defined(SPANDSP_SUPPORT_T42)
 #include "spandsp/t42.h"
-#endif
 #if defined(SPANDSP_SUPPORT_T43)
 #include "spandsp/t43.h"
 #endif
@@ -82,20 +77,15 @@
 
 #include "spandsp/private/logging.h"
 #include "spandsp/private/timezone.h"
-#if defined(SPANDSP_SUPPORT_T42)  ||  defined(SPANDSP_SUPPORT_T43)  ||  defined(SPANDSP_SUPPORT_T85)
 #include "spandsp/private/t81_t82_arith_coding.h"
-#endif
-#if defined(SPANDSP_SUPPORT_T85)
 #include "spandsp/private/t85.h"
-#endif
-#if defined(SPANDSP_SUPPORT_T42)
 #include "spandsp/private/t42.h"
-#endif
 #if defined(SPANDSP_SUPPORT_T43)
 #include "spandsp/private/t43.h"
 #endif
 #include "spandsp/private/t4_t6_decode.h"
 #include "spandsp/private/t4_t6_encode.h"
+#include "spandsp/private/image_translate.h"
 #include "spandsp/private/t4_rx.h"
 #include "spandsp/private/t4_tx.h"
 #include "spandsp/private/t30.h"
@@ -250,6 +240,7 @@ SPAN_DECLARE(const char *) t30_completion_code_to_str(int result)
     case T30_ERR_CSA_UNACCEPTABLE:
         return "Called subscriber internet address not accepted";
     }
+    /*endswitch*/
     return "???";
 }
 /*- End of function --------------------------------------------------------*/
@@ -416,9 +407,12 @@ SPAN_DECLARE(const char *) t30_frametype(uint8_t x)
         return "NULL";
     case T4_FCD:
         return "FCD";
+    case T4_CCD:
+        return "CCD";
     case T4_RCP:
         return "RCP";
     }
+    /*endswitch*/
     return "???";
 }
 /*- End of function --------------------------------------------------------*/
@@ -444,6 +438,7 @@ static void octet_reserved_bit(logging_state_t *log,
         s[7 - bit_no + ((bit_no < 4)  ?  1  :  0)] = (uint8_t) (bit + '0');
         span_log(log, SPAN_LOG_FLOW, "  %s= Unexpected state for reserved bit: %d\n", s, bit);
     }
+    /*endif*/
 }
 /*- End of function --------------------------------------------------------*/
 

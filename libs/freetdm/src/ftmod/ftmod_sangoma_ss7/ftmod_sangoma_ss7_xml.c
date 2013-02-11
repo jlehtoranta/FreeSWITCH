@@ -29,6 +29,12 @@
  * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *
+ * Contributors: 
+ *
+ * James Zhang <jzhang@sangoma.com>
+ *
  */
 
 /* INCLUDE ********************************************************************/
@@ -62,6 +68,7 @@ sng_switch_type_t sng_switch_type_map[] =
 	{ 1, "india"  , LSI_SW_INDIA   , LSI_SW_INDIA   },
 	{ 1, "uk"     , LSI_SW_UK      , LSI_SW_UK      },
 	{ 1, "russia" , LSI_SW_RUSSIA  , LSI_SW_RUSSIA  },
+	{ 1, "china"  , LSI_SW_CHINA   , LSI_SW_CHINA   },
 	{ 0, "", 0, 0 },
 };
 
@@ -123,10 +130,15 @@ typedef struct sng_ccSpan
 	uint32_t		clg_nadi;
 	uint32_t		cld_nadi;
 	uint32_t		rdnis_nadi;
+	uint32_t		loc_nadi;
 	uint32_t		min_digits;
-	uint8_t			itx_auto_reply;
+	uint32_t		transparent_iam_max_size;
 	uint8_t			transparent_iam;
+	uint8_t         cpg_on_progress_media;
+	uint8_t         cpg_on_progress;
+	uint8_t			itx_auto_reply;
 	uint32_t		t3;
+	uint32_t		t10;
 	uint32_t		t12;
 	uint32_t		t13;
 	uint32_t		t14;
@@ -134,6 +146,7 @@ typedef struct sng_ccSpan
 	uint32_t		t16;
 	uint32_t		t17;
 	uint32_t		t35;
+	uint32_t		t39;
 	uint32_t		tval;
 } sng_ccSpan_t;
 
@@ -185,18 +198,20 @@ static int ftmod_ss7_fill_in_self_route(int spc, int linkType, int switchType, i
 static int ftmod_ss7_fill_in_circuits(sng_span_t *sngSpan);
 
 static int ftmod_ss7_next_timeslot(char *ch_map, sng_timeslot_t *timeslot);
+static void ftmod_ss7_set_glare_resolution (const char *method);
 
 /******************************************************************************/
 
 /* FUNCTIONS ******************************************************************/
+
 int ftmod_ss7_parse_xml(ftdm_conf_parameter_t *ftdm_parameters, ftdm_span_t *span)
 {
+	sng_route_t			self_route;
+	sng_span_t			sngSpan;
 	int					i = 0;
 	const char			*var = NULL;
 	const char			*val = NULL;
 	ftdm_conf_node_t	*ptr = NULL;
-	sng_route_t			self_route;
-	sng_span_t			sngSpan;
 
 	/* clean out the isup ckt */
 	memset(&sngSpan, 0x0, sizeof(sngSpan));
@@ -206,9 +221,29 @@ int ftmod_ss7_parse_xml(ftdm_conf_parameter_t *ftdm_parameters, ftdm_span_t *spa
 
 	var = ftdm_parameters[i].var;
 	val = ftdm_parameters[i].val;
+
+	g_ftdm_operating_mode = SNG_SS7_OPR_MODE_ISUP;
+
+	/* confirm that the first parameter is the "operating-mode" */
+	if(!strcasecmp(var, "operating-mode")){
+		if(!strcasecmp(val, "ISUP")) {
+			g_ftdm_operating_mode = SNG_SS7_OPR_MODE_ISUP;
+		}
+		else if(!strcasecmp(val, "M2UA_SG")) {
+			g_ftdm_operating_mode = SNG_SS7_OPR_MODE_M2UA_SG;
+		} else {
+			SS7_DEBUG("Operating mode not specified, defaulting to ISUP\n");
+		}
+		i++;
+	}
+
+	
+
+	var = ftdm_parameters[i].var;
+	val = ftdm_parameters[i].val;
 	ptr = (ftdm_conf_node_t *)ftdm_parameters[i].ptr;
 
-	/* confirm that the first parameter is the "confnode" */
+	/* confirm that the 2nd parameter is the "confnode" */
 	if (!strcasecmp(var, "confnode")) {
 		/* parse the confnode and fill in the global libsng_ss7 config structure */
 		if (ftmod_ss7_parse_sng_isup(ptr)) {
@@ -223,28 +258,20 @@ int ftmod_ss7_parse_xml(ftdm_conf_parameter_t *ftdm_parameters, ftdm_span_t *spa
 	}
 
 	i++;
-	while (ftdm_parameters[i].var != NULL) {
-	/**************************************************************************/
 
+	while (ftdm_parameters[i].var != NULL) {
 		var = ftdm_parameters[i].var;
 		val = ftdm_parameters[i].val;
 
 		if (!strcasecmp(var, "dialplan")) {
-		/**********************************************************************/
 			/* don't care for now */
-		/**********************************************************************/
 		} else if (!strcasecmp(var, "context")) {
-		/**********************************************************************/
 			/* don't care for now */
-		/**********************************************************************/
-		} else if (!strcasecmp(var, "ccSpanId")) {
-		/**********************************************************************/
+		} else if (!strcasecmp(var, "span-id") || !strcasecmp(var, "ccSpanId")) {
 			sngSpan.ccSpanId = atoi(val);
 			SS7_DEBUG("Found an ccSpanId  = %d\n",sngSpan.ccSpanId);
-		/**********************************************************************/
 		} else {
 			SS7_ERROR("Unknown parameter found =\"%s\"...ignoring it!\n", var);
-		/**********************************************************************/
 		}
 
 		i++;
@@ -253,10 +280,12 @@ int ftmod_ss7_parse_xml(ftdm_conf_parameter_t *ftdm_parameters, ftdm_span_t *spa
 	/* fill the pointer to span into isupCkt */
 	sngSpan.span = span;
 
-	/* setup the circuits structure */
-	if(ftmod_ss7_fill_in_circuits(&sngSpan)) {
-		SS7_ERROR("Failed to fill in circuits structure!\n");
-		goto ftmod_ss7_parse_xml_error;
+	if(SNG_SS7_OPR_MODE_ISUP == g_ftdm_operating_mode){
+		/* setup the circuits structure */
+		if(ftmod_ss7_fill_in_circuits(&sngSpan)) {
+			SS7_ERROR("Failed to fill in circuits structure!\n");
+			goto ftmod_ss7_parse_xml_error;
+		}
 	}
 
 	return FTDM_SUCCESS;
@@ -278,6 +307,11 @@ static int ftmod_ss7_parse_sng_isup(ftdm_conf_node_t *sng_isup)
 	ftdm_conf_node_t	*isup_interfaces = NULL;
 	ftdm_conf_node_t	*cc_spans = NULL;
 	ftdm_conf_node_t	*tmp_node = NULL;
+	ftdm_conf_node_t	*nif_ifaces = NULL;
+	ftdm_conf_node_t	*m2ua_ifaces = NULL;
+	ftdm_conf_node_t	*m2ua_peer_ifaces = NULL;
+	ftdm_conf_node_t	*m2ua_clust_ifaces = NULL;
+	ftdm_conf_node_t	*sctp_ifaces = NULL;
 
 	/* confirm that we are looking at sng_isup */
 	if (strcasecmp(sng_isup->name, "sng_isup")) {
@@ -383,12 +417,62 @@ static int ftmod_ss7_parse_sng_isup(ftdm_conf_node_t *sng_isup)
 				return FTDM_FAIL;
 			}
 		/**********************************************************************/
+		} else if (!strcasecmp(tmp_node->name, "sng_nif_interfaces")) {
+		/**********************************************************************/
+			if (nif_ifaces == NULL) {
+				nif_ifaces = tmp_node;
+				SS7_DEBUG("Found a \"sng_nif_interfaces\" section!\n");
+			} else {
+				SS7_ERROR("Found a second \"sng_nif_interfaces\" section\n!");
+				return FTDM_FAIL;
+			}
+		/**********************************************************************/
+		} else if (!strcasecmp(tmp_node->name, "sng_m2ua_interfaces")) {
+		/**********************************************************************/
+			if (m2ua_ifaces == NULL) {
+				m2ua_ifaces = tmp_node;
+				SS7_DEBUG("Found a \"sng_m2ua_interfaces\" section!\n");
+			} else {
+				SS7_ERROR("Found a second \"sng_m2ua_interfaces\" section\n!");
+				return FTDM_FAIL;
+			}
+		/**********************************************************************/
+		} else if (!strcasecmp(tmp_node->name, "sng_m2ua_peer_interfaces")) {
+		/**********************************************************************/
+			if (m2ua_peer_ifaces == NULL) {
+				m2ua_peer_ifaces = tmp_node;
+				SS7_DEBUG("Found a \"sng_m2ua_peer_interfaces\" section!\n");
+			} else {
+				SS7_ERROR("Found a second \"sng_m2ua_peer_interfaces\" section\n!");
+				return FTDM_FAIL;
+			}
+		/**********************************************************************/
+		} else if (!strcasecmp(tmp_node->name, "sng_m2ua_cluster_interfaces")) {
+		/**********************************************************************/
+			if (m2ua_clust_ifaces == NULL) {
+				m2ua_clust_ifaces = tmp_node;
+				SS7_DEBUG("Found a \"sng_m2ua_cluster_interfaces\" section!\n");
+			} else {
+				SS7_ERROR("Found a second \"sng_m2ua_peer_interfaces\" section\n!");
+				return FTDM_FAIL;
+			}
+		/**********************************************************************/
+		} else if (!strcasecmp(tmp_node->name, "sng_sctp_interfaces")) {
+		/**********************************************************************/
+			if (sctp_ifaces == NULL) {
+				sctp_ifaces = tmp_node;
+				SS7_DEBUG("Found a <sng_sctp_interfaces> section!\n");
+			} else {
+				SS7_ERROR("Found a second <sng_sctp_interfaces> section!\n");
+				return FTDM_FAIL;
+			}
+		/**********************************************************************/
 		} else {
 		/**********************************************************************/
 			SS7_ERROR("\tFound an unknown section \"%s\"!\n", tmp_node->name);
 			return FTDM_FAIL;
 		/**********************************************************************/
-		} 
+		}
 
 		/* go to the next sibling */
 		tmp_node = tmp_node->next;
@@ -415,32 +499,90 @@ static int ftmod_ss7_parse_sng_isup(ftdm_conf_node_t *sng_isup)
 		return FTDM_FAIL;
 	}
 
-	if (ftmod_ss7_parse_mtp3_links(mtp3_links)) {
-		SS7_ERROR("Failed to parse \"mtp3_links\"!\n");
-		return FTDM_FAIL;
-	}
 
-	if (ftmod_ss7_parse_mtp_linksets(mtp_linksets)) {
-		SS7_ERROR("Failed to parse \"mtp_linksets\"!\n");
-		return FTDM_FAIL;
-	}
+	switch(g_ftdm_operating_mode)
+	{
+		case SNG_SS7_OPR_MODE_ISUP:
+			{
+				if (mtp3_links && ftmod_ss7_parse_mtp3_links(mtp3_links)) {
+					SS7_ERROR("Failed to parse \"mtp3_links\"!\n");
+					return FTDM_FAIL;
+				}
 
-	if (ftmod_ss7_parse_mtp_routes(mtp_routes)) {	
-		SS7_ERROR("Failed to parse \"mtp_routes\"!\n");
-		return FTDM_FAIL;
-	}
+				if (ftmod_ss7_parse_mtp_linksets(mtp_linksets)) {
+					SS7_ERROR("Failed to parse \"mtp_linksets\"!\n");
+					return FTDM_FAIL;
+				}
 
-	if (ftmod_ss7_parse_isup_interfaces(isup_interfaces)) {
-		SS7_ERROR("Failed to parse \"isup_interfaces\"!\n");
-		return FTDM_FAIL;
-	}
+				if (ftmod_ss7_parse_mtp_routes(mtp_routes)) {	
+					SS7_ERROR("Failed to parse \"mtp_routes\"!\n");
+					return FTDM_FAIL;
+				}
 
-	if (ftmod_ss7_parse_cc_spans(cc_spans)) {
-		SS7_ERROR("Failed to parse \"cc_spans\"!\n");
-		return FTDM_FAIL;
+				if (isup_interfaces && ftmod_ss7_parse_isup_interfaces(isup_interfaces)) {
+					SS7_ERROR("Failed to parse \"isup_interfaces\"!\n");
+					return FTDM_FAIL;
+				}
+
+				if (cc_spans && ftmod_ss7_parse_cc_spans(cc_spans)) {
+					SS7_ERROR("Failed to parse \"cc_spans\"!\n");
+					return FTDM_FAIL;
+				}
+				break;
+			}
+		case SNG_SS7_OPR_MODE_M2UA_SG: 
+			{
+				if (ftmod_ss7_parse_sctp_links(sctp_ifaces) != FTDM_SUCCESS) {
+					SS7_ERROR("Failed to parse <sctp_links>!\n");
+					return FTDM_FAIL;
+				}
+
+				if (nif_ifaces && ftmod_ss7_parse_nif_interfaces(nif_ifaces)) {
+					SS7_ERROR("Failed to parse \"nif_ifaces\"!\n");
+					return FTDM_FAIL;
+				}
+
+				if (m2ua_ifaces && ftmod_ss7_parse_m2ua_interfaces(m2ua_ifaces)) {
+					SS7_ERROR("Failed to parse \"m2ua_ifaces\"!\n");
+					return FTDM_FAIL;
+				}
+				if (m2ua_peer_ifaces && ftmod_ss7_parse_m2ua_peer_interfaces(m2ua_peer_ifaces)) {
+					SS7_ERROR("Failed to parse \"m2ua_peer_ifaces\"!\n");
+					return FTDM_FAIL;
+				}
+				if (m2ua_clust_ifaces && ftmod_ss7_parse_m2ua_clust_interfaces(m2ua_clust_ifaces)) {
+					SS7_ERROR("Failed to parse \"m2ua_clust_ifaces\"!\n");
+					return FTDM_FAIL;
+				}
+				break;
+			}
+		default:
+			SS7_ERROR("Invalid operating mode[%d]\n",g_ftdm_operating_mode);
+			break;
+
 	}
 
 	return FTDM_SUCCESS;
+}
+
+static void ftmod_ss7_set_glare_resolution (const char *method)
+{
+	sng_glare_resolution iMethod=SNGSS7_GLARE_PC;
+	if (!method || (strlen (method) <=0) ) {
+		SS7_ERROR( "Wrong glare resolution parameter, using default. \n" );
+	} else {
+		if (!strcasecmp( method, "PointCode")) {
+			iMethod = SNGSS7_GLARE_PC;
+		} else if (!strcasecmp( method, "Down")) {
+			iMethod = SNGSS7_GLARE_DOWN;
+		} else if (!strcasecmp( method, "Control")) {
+			iMethod = SNGSS7_GLARE_CONTROL;
+		} else {
+			SS7_ERROR( "Wrong glare resolution parameter, using default. \n" );
+			iMethod = SNGSS7_GLARE_PC;			
+		}
+	}
+	g_ftdm_sngss7_data.cfg.glareResolution = iMethod;
 }
 
 /******************************************************************************/
@@ -450,31 +592,41 @@ static int ftmod_ss7_parse_sng_gen(ftdm_conf_node_t *sng_gen)
 	int						num_parms = sng_gen->n_parameters;
 	int						i = 0;
 
+	/* Set the transparent_iam_max_size to default value */
+	g_ftdm_sngss7_data.cfg.transparent_iam_max_size=800;
+	g_ftdm_sngss7_data.cfg.force_inr = 0;
+
 	/* extract all the information from the parameters */
 	for (i = 0; i < num_parms; i++) {
-	/**************************************************************************/
-
 		if (!strcasecmp(parm->var, "procId")) {
-		/**********************************************************************/
 			g_ftdm_sngss7_data.cfg.procId = atoi(parm->val);
 			SS7_DEBUG("Found a procId = %d\n", g_ftdm_sngss7_data.cfg.procId);
-		/**********************************************************************/
-		} else if (!strcasecmp(parm->var, "license")) {
-		/**********************************************************************/
-			strcpy(g_ftdm_sngss7_data.cfg.license, parm->val);
-			strcpy(g_ftdm_sngss7_data.cfg.signature, parm->val);
-			strcat(g_ftdm_sngss7_data.cfg.signature, ".sig");
+		} 
+		else if (!strcasecmp(parm->var, "license")) {
+			ftdm_set_string(g_ftdm_sngss7_data.cfg.license, parm->val);
+			snprintf(g_ftdm_sngss7_data.cfg.signature, sizeof(g_ftdm_sngss7_data.cfg.signature), "%s.sig", parm->val);
 			SS7_DEBUG("Found license file = %s\n", g_ftdm_sngss7_data.cfg.license);
 			SS7_DEBUG("Found signature file = %s\n", g_ftdm_sngss7_data.cfg.signature);	
-		/**********************************************************************/
-		} else if (!strcasecmp(parm->var, "transparent_iam_max_size")) {
+		} 
+		else if (!strcasecmp(parm->var, "transparent_iam_max_size")) {
 			g_ftdm_sngss7_data.cfg.transparent_iam_max_size = atoi(parm->val);
 			SS7_DEBUG("Found a transparent_iam max size = %d\n", g_ftdm_sngss7_data.cfg.transparent_iam_max_size);
-		} else {
-		/**********************************************************************/
+		} 
+		else if (!strcasecmp(parm->var, "glare-reso")) {
+			ftmod_ss7_set_glare_resolution (parm->val);
+			SS7_DEBUG("Found glare resolution configuration = %d  %s\n", g_ftdm_sngss7_data.cfg.glareResolution, parm->val );
+		}
+		else if (!strcasecmp(parm->var, "force-inr")) {
+			if (ftdm_true(parm->val)) {
+				g_ftdm_sngss7_data.cfg.force_inr = 1;
+			} else {
+				g_ftdm_sngss7_data.cfg.force_inr = 0;
+			}
+			SS7_DEBUG("Found INR force configuration = %s\n", parm->val );
+		}
+		else {
 			SS7_ERROR("Found an invalid parameter \"%s\"!\n", parm->val);
 			return FTDM_FAIL;
-		/**********************************************************************/
 		}
 
 		/* move to the next parmeter */
@@ -1570,11 +1722,6 @@ static int ftmod_ss7_parse_isup_interface(ftdm_conf_node_t *isup_interface)
 			sng_isap.t9 = atoi(parm->val);
 			SS7_DEBUG("Found isup t9 = %d\n",sng_isap.t9);
 		/**********************************************************************/
-		} else if (!strcasecmp(parm->var, "isup.t10")) {
-		/**********************************************************************/
-			sng_isup.t10 = atoi(parm->val);
-			SS7_DEBUG("Found isup t10 = %d\n",sng_isup.t10);
-		/**********************************************************************/
 		} else if (!strcasecmp(parm->var, "isup.t11")) {
 		/**********************************************************************/
 			sng_isup.t11 = atoi(parm->val);
@@ -1848,11 +1995,13 @@ static int ftmod_ss7_parse_cc_span(ftdm_conf_node_t *cc_span)
 	int						flag_clg_nadi = 0;
 	int						flag_cld_nadi = 0;
 	int						flag_rdnis_nadi = 0;
+	int						flag_loc_nadi = 0;
 	int						i;
 	int						ret;
 
 	/* initalize the ccSpan structure */
 	memset(&sng_ccSpan, 0x0, sizeof(sng_ccSpan));
+
 
 	/* confirm that we are looking at an mtp_link */
 	if (strcasecmp(cc_span->name, "cc_span")) {
@@ -1861,6 +2010,14 @@ static int ftmod_ss7_parse_cc_span(ftdm_conf_node_t *cc_span)
 	} else {
 		SS7_DEBUG("Parsing \"cc_span\"...\n");
 	}
+
+	/* Backward compatible. 
+     * If cpg_on_progress_media is not in the config file
+     * default the cpg on progress_media to TRUE */
+	sng_ccSpan.cpg_on_progress_media=FTDM_TRUE;
+	/* If transparent_iam_max_size is not set in cc spans
+     * use the global value */
+ 	sng_ccSpan.transparent_iam_max_size=g_ftdm_sngss7_data.cfg.transparent_iam_max_size;
 
 
 	for (i = 0; i < num_parms; i++) {
@@ -1907,6 +2064,15 @@ static int ftmod_ss7_parse_cc_span(ftdm_conf_node_t *cc_span)
 			sng_ccSpan.transparent_iam = ftdm_true(parm->val);
 			SS7_DEBUG("Found transparent_iam %d\n", sng_ccSpan.transparent_iam);
 #endif
+		} else if (!strcasecmp(parm->var, "transparent_iam_max_size")) {
+			sng_ccSpan.transparent_iam_max_size = atoi(parm->val);
+			SS7_DEBUG("Found transparent_iam_max_size %d\n", sng_ccSpan.transparent_iam_max_size);
+		} else if (!strcasecmp(parm->var, "cpg_on_progress_media")) {
+			sng_ccSpan.cpg_on_progress_media = ftdm_true(parm->val);
+			SS7_DEBUG("Found cpg_on_progress_media %d\n", sng_ccSpan.cpg_on_progress_media);
+		} else if (!strcasecmp(parm->var, "cpg_on_progress")) {
+			sng_ccSpan.cpg_on_progress = ftdm_true(parm->val);
+			SS7_DEBUG("Found cpg_on_progress %d\n", sng_ccSpan.cpg_on_progress);
 		} else if (!strcasecmp(parm->var, "cicbase")) {
 		/**********************************************************************/
 			sng_ccSpan.cicbase = atoi(parm->val);
@@ -1949,6 +2115,12 @@ static int ftmod_ss7_parse_cc_span(ftdm_conf_node_t *cc_span)
 				SS7_DEBUG("Invalid parm->value for obci_bita option\n");
 			}
 		/**********************************************************************/
+		} else if (!strcasecmp(parm->var, "loc_nadi")) {
+			/* add location reference number */
+			flag_loc_nadi = 1;
+			sng_ccSpan.loc_nadi = atoi(parm->val);
+			SS7_DEBUG("Found default LOC_NADI parm->value = %d\n", sng_ccSpan.loc_nadi);
+		/**********************************************************************/
 		} else if (!strcasecmp(parm->var, "lpa_on_cot")) {
 		/**********************************************************************/
 			if (*parm->val == '1') {
@@ -1965,6 +2137,10 @@ static int ftmod_ss7_parse_cc_span(ftdm_conf_node_t *cc_span)
 		/**********************************************************************/
 			sng_ccSpan.t3 = atoi(parm->val);
 			SS7_DEBUG("Found isup t3 = %d\n", sng_ccSpan.t3);
+		} else if (!strcasecmp(parm->var, "isup.t10")) {
+		/**********************************************************************/
+			sng_ccSpan.t10 = atoi(parm->val);
+			SS7_DEBUG("Found isup t10 = %d\n", sng_ccSpan.t10);
 		/**********************************************************************/
 		} else if (!strcasecmp(parm->var, "isup.t12")) {
 		/**********************************************************************/
@@ -2001,6 +2177,11 @@ static int ftmod_ss7_parse_cc_span(ftdm_conf_node_t *cc_span)
 			sng_ccSpan.t35 = atoi(parm->val);
 			SS7_DEBUG("Found isup t35 = %d\n",sng_ccSpan.t35);
 		/**********************************************************************/
+		} else if (!strcasecmp(parm->var, "isup.t39")) {
+		/**********************************************************************/
+			sng_ccSpan.t39 = atoi(parm->val);
+			SS7_DEBUG("Found isup t39 = %d\n",sng_ccSpan.t39);
+		/**********************************************************************/
 		} else if (!strcasecmp(parm->var, "isup.tval")) {
 		/**********************************************************************/
 			sng_ccSpan.tval = atoi(parm->val);
@@ -2032,6 +2213,11 @@ static int ftmod_ss7_parse_cc_span(ftdm_conf_node_t *cc_span)
 	if (!flag_rdnis_nadi) {
 		/* default the nadi value to national */
 		sng_ccSpan.rdnis_nadi = 0x03;
+	}
+
+	if (!flag_loc_nadi) {
+		/* default the nadi value to national */
+		sng_ccSpan.loc_nadi = 0x03;
 	}
 
 	/* pull up the SSF and Switchtype from the isup interface */
@@ -2082,7 +2268,7 @@ static int ftmod_ss7_fill_in_relay_channel(sng_relay_t *relay_channel)
 					relay_channel->port,
 					relay_channel->procId, 
 					relay_channel->id);
-		sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_RY);
+		sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_RY_PRESENT);
 	} else {
 		relay_channel->id = i;
 		SS7_DEBUG("found existing relay channel on type:%d, hostname:%s, port:%d, procId:%d, id = %d\n",
@@ -2116,7 +2302,7 @@ static int ftmod_ss7_fill_in_mtp1_link(sng_mtp1_link_t *mtp1Link)
 	/* check if this id value has been used already */
 	if (g_ftdm_sngss7_data.cfg.mtp1Link[i].id == 0) {
 		SS7_DEBUG("Found new MTP1 Link: id=%d, name=%s\n", mtp1Link->id, mtp1Link->name);
-		sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_MTP1);
+		sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_MTP1_PRESENT);
 	} else {
 		SS7_DEBUG("Found an existing MTP1 Link: id=%d, name=%s (old name=%s)\n", 
 					mtp1Link->id, 
@@ -2142,7 +2328,7 @@ static int ftmod_ss7_fill_in_mtp2_link(sng_mtp2_link_t *mtp2Link)
 	/* check if this id value has been used already */
 	if (g_ftdm_sngss7_data.cfg.mtp2Link[i].id == 0) {
 		SS7_DEBUG("Found new MTP2 Link: id=%d, name=%s\n", mtp2Link->id, mtp2Link->name);
-		sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_MTP2);
+		sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_MTP2_PRESENT);
 	} else {
 		SS7_DEBUG("Found an existing MTP2 Link: id=%d, name=%s (old name=%s)\n", 
 					mtp2Link->id, 
@@ -2219,7 +2405,7 @@ static int ftmod_ss7_fill_in_mtp3_link(sng_mtp3_link_t *mtp3Link)
 	/* check if this id value has been used already */
 	if (g_ftdm_sngss7_data.cfg.mtp3Link[i].id == 0) {
 		SS7_DEBUG("Found new MTP3 Link: id=%d, name=%s\n", mtp3Link->id, mtp3Link->name);
-		sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_MTP3);
+		sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_MTP3_PRESENT);
 	} else {
 		SS7_DEBUG("Found an existing MTP3 Link: id=%d, name=%s (old name=%s)\n", 
 					mtp3Link->id, 
@@ -2560,7 +2746,7 @@ static int ftmod_ss7_fill_in_isup_interface(sng_isup_inf_t *sng_isup)
 	/* check if this id value has been used already */
 	if (g_ftdm_sngss7_data.cfg.isupIntf[i].id == 0) {
 		SS7_DEBUG("Found new ISUP Interface: id=%d, name=%s\n", sng_isup->id, sng_isup->name);
-		sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_ISUP);
+		sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_ISUP_PRESENT);
 	} else {
 		SS7_DEBUG("Found an existing ISUP Interface: id=%d, name=%s (old name=%s)\n", 
 					sng_isup->id, 
@@ -2583,11 +2769,6 @@ static int ftmod_ss7_fill_in_isup_interface(sng_isup_inf_t *sng_isup)
 		g_ftdm_sngss7_data.cfg.isupIntf[i].t4		= sng_isup->t4;
 	} else {
 		g_ftdm_sngss7_data.cfg.isupIntf[i].t4		= 3000;
-	}
-	if (sng_isup->t10 != 0) {
-		g_ftdm_sngss7_data.cfg.isupIntf[i].t10		= sng_isup->t10;
-	} else {
-		g_ftdm_sngss7_data.cfg.isupIntf[i].t10		= 50;
 	}
 	if (sng_isup->t11 != 0) {
 		g_ftdm_sngss7_data.cfg.isupIntf[i].t11		= sng_isup->t11;
@@ -2727,7 +2908,7 @@ static int ftmod_ss7_fill_in_isap(sng_isap_t *sng_isap)
 	if (sng_isap->t1 != 0) {
 		g_ftdm_sngss7_data.cfg.isap[i].t1		= sng_isap->t1;
 	} else {
-		g_ftdm_sngss7_data.cfg.isap[i].t1		= 200;
+		g_ftdm_sngss7_data.cfg.isap[i].t1		= 150;
 	}
 	if (sng_isap->t2 != 0) {
 		g_ftdm_sngss7_data.cfg.isap[i].t2		= sng_isap->t2;
@@ -2742,17 +2923,17 @@ static int ftmod_ss7_fill_in_isap(sng_isap_t *sng_isap)
 	if (sng_isap->t6 != 0) {
 		g_ftdm_sngss7_data.cfg.isap[i].t6		= sng_isap->t6;
 	} else {
-		g_ftdm_sngss7_data.cfg.isap[i].t6		= 200;
+		g_ftdm_sngss7_data.cfg.isap[i].t6		= 600;
 	}
 	if (sng_isap->t7 != 0) {
 		g_ftdm_sngss7_data.cfg.isap[i].t7		= sng_isap->t7;
 	} else {
-		g_ftdm_sngss7_data.cfg.isap[i].t7		= 250;
+		g_ftdm_sngss7_data.cfg.isap[i].t7		= 200;
 	}
 	if (sng_isap->t8 != 0) {
 		g_ftdm_sngss7_data.cfg.isap[i].t8		= sng_isap->t8;
 	} else {
-		g_ftdm_sngss7_data.cfg.isap[i].t8		= 120;
+		g_ftdm_sngss7_data.cfg.isap[i].t8		= 100;
 	}
 	if (sng_isap->t9 != 0) {
 		g_ftdm_sngss7_data.cfg.isap[i].t9		= sng_isap->t9;
@@ -2867,7 +3048,7 @@ static int ftmod_ss7_fill_in_ccSpan(sng_ccSpan_t *ccSpan)
 					(g_ftdm_sngss7_data.cfg.isupCkt[x].chan == count)) {
 
 					/* we are processing a circuit that already exists */
-					SS7_DEBUG("Found an existing circuit %d, ccSpanId=%d, chan%d\n",
+					SS7_DEVEL_DEBUG("Found an existing circuit %d, ccSpanId=%d, chan%d\n",
 								x, 
 								ccSpan->id, 
 								count);
@@ -2876,7 +3057,7 @@ static int ftmod_ss7_fill_in_ccSpan(sng_ccSpan_t *ccSpan)
 					flag = 1;
 
 					/* not supporting reconfig at this time */
-					SS7_DEBUG("Not supporting ckt reconfig at this time!\n");
+					SS7_DEVEL_DEBUG("Not supporting ckt reconfig at this time!\n");
 					goto move_along;
 				} else {
 					/* this is not the droid you are looking for */
@@ -2889,6 +3070,9 @@ static int ftmod_ss7_fill_in_ccSpan(sng_ccSpan_t *ccSpan)
 		/* prepare the global info sturcture */
 		ss7_info = ftdm_calloc(1, sizeof(sngss7_chan_data_t));
 		ss7_info->ftdmchan = NULL;
+		if (ftdm_queue_create(&ss7_info->event_queue, SNGSS7_CHAN_EVENT_QUEUE_SIZE) != FTDM_SUCCESS) {
+			SS7_CRITICAL("Failed to create ss7 cic event queue\n");
+		}
 		ss7_info->circuit = &g_ftdm_sngss7_data.cfg.isupCkt[x];
 
 		g_ftdm_sngss7_data.cfg.isupCkt[x].obj			= ss7_info;
@@ -2908,7 +3092,7 @@ static int ftmod_ss7_fill_in_ccSpan(sng_ccSpan_t *ccSpan)
 			g_ftdm_sngss7_data.cfg.isupCkt[x].type		= SNG_CKT_VOICE;
 			
 			/* throw the flag to indicate that we need to start call control */
-			sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_CC);
+			sngss7_set_flag(&g_ftdm_sngss7_data.cfg, SNGSS7_CC_PRESENT);
 		}
 
 		if (timeslot.channel) {
@@ -2923,17 +3107,26 @@ static int ftmod_ss7_fill_in_ccSpan(sng_ccSpan_t *ccSpan)
 		g_ftdm_sngss7_data.cfg.isupCkt[x].ssf						= ccSpan->ssf;
 		g_ftdm_sngss7_data.cfg.isupCkt[x].cld_nadi					= ccSpan->cld_nadi;
 		g_ftdm_sngss7_data.cfg.isupCkt[x].clg_nadi					= ccSpan->clg_nadi;
-		g_ftdm_sngss7_data.cfg.isupCkt[x].rdnis_nadi				= ccSpan->rdnis_nadi;
+		g_ftdm_sngss7_data.cfg.isupCkt[x].rdnis_nadi					= ccSpan->rdnis_nadi;
+		g_ftdm_sngss7_data.cfg.isupCkt[x].loc_nadi					= ccSpan->loc_nadi;
 		g_ftdm_sngss7_data.cfg.isupCkt[x].options					= ccSpan->options;
-		g_ftdm_sngss7_data.cfg.isupCkt[x].switchType				= ccSpan->switchType;
-		g_ftdm_sngss7_data.cfg.isupCkt[x].min_digits				= ccSpan->min_digits;
-		g_ftdm_sngss7_data.cfg.isupCkt[x].itx_auto_reply			= ccSpan->itx_auto_reply;
-		g_ftdm_sngss7_data.cfg.isupCkt[x].transparent_iam			= ccSpan->transparent_iam;
+		g_ftdm_sngss7_data.cfg.isupCkt[x].switchType					= ccSpan->switchType;
+		g_ftdm_sngss7_data.cfg.isupCkt[x].min_digits					= ccSpan->min_digits;
+		g_ftdm_sngss7_data.cfg.isupCkt[x].itx_auto_reply				= ccSpan->itx_auto_reply;
+		g_ftdm_sngss7_data.cfg.isupCkt[x].transparent_iam				= ccSpan->transparent_iam;
+		g_ftdm_sngss7_data.cfg.isupCkt[x].transparent_iam_max_size		= ccSpan->transparent_iam_max_size;
+		g_ftdm_sngss7_data.cfg.isupCkt[x].cpg_on_progress_media			= ccSpan->cpg_on_progress_media;
+		g_ftdm_sngss7_data.cfg.isupCkt[x].cpg_on_progress	 		    = ccSpan->cpg_on_progress;
 
 		if (ccSpan->t3 == 0) {
 			g_ftdm_sngss7_data.cfg.isupCkt[x].t3			= 1200;
 		} else {
 			g_ftdm_sngss7_data.cfg.isupCkt[x].t3			= ccSpan->t3;
+		}
+		if (ccSpan->t10 == 0) {
+			g_ftdm_sngss7_data.cfg.isupCkt[x].t10		= 50;
+		} else {
+			g_ftdm_sngss7_data.cfg.isupCkt[x].t10		= ccSpan->t10;
 		}
 		if (ccSpan->t12 == 0) {
 			g_ftdm_sngss7_data.cfg.isupCkt[x].t12		= 300;
@@ -2966,10 +3159,17 @@ static int ftmod_ss7_fill_in_ccSpan(sng_ccSpan_t *ccSpan)
 			g_ftdm_sngss7_data.cfg.isupCkt[x].t17		= ccSpan->t17;
 		}
 		if (ccSpan->t35 == 0) {
-			g_ftdm_sngss7_data.cfg.isupCkt[x].t17		= 170;
+			/* Q.764 2.2.5 Address incomplete (T35 is 15-20 seconds according to Table A.1/Q.764) */
+			g_ftdm_sngss7_data.cfg.isupCkt[x].t35		= 170;
 		} else {
-			g_ftdm_sngss7_data.cfg.isupCkt[x].t17		= ccSpan->t35;
+			g_ftdm_sngss7_data.cfg.isupCkt[x].t35		= ccSpan->t35;
 		}
+		if (ccSpan->t39 == 0) {
+			g_ftdm_sngss7_data.cfg.isupCkt[x].t39		= 120;
+		} else {
+			g_ftdm_sngss7_data.cfg.isupCkt[x].t39		= ccSpan->t39;
+		}
+		
 		if (ccSpan->tval == 0) {
 			g_ftdm_sngss7_data.cfg.isupCkt[x].tval		= 10;
 		} else {
@@ -3062,11 +3262,24 @@ static int ftmod_ss7_fill_in_circuits(sng_span_t *sngSpan)
 		ftdmchan->call_data = ss7_info;
 
 		/* prepare the timer structures */
-		ss7_info->t35.sched			= ((sngss7_span_data_t *)(ftdmspan->signal_data))->sched;
+		ss7_info->t35.sched		= ((sngss7_span_data_t *)(ftdmspan->signal_data))->sched;
 		ss7_info->t35.counter		= 1;
-		ss7_info->t35.beat			= (isupCkt->t35) * 100; /* beat is in ms, t35 is in 100ms */
+		ss7_info->t35.beat		= (isupCkt->t35) * 100; /* beat is in ms, t35 is in 100ms */
 		ss7_info->t35.callback		= handle_isup_t35;
 		ss7_info->t35.sngss7_info	= ss7_info;
+
+		ss7_info->t10.sched		= ((sngss7_span_data_t *)(ftdmspan->signal_data))->sched;
+		ss7_info->t10.counter		= 1;
+		ss7_info->t10.beat		= (isupCkt->t10) * 100; /* beat is in ms, t10 is in 100ms */
+		ss7_info->t10.callback		= handle_isup_t10;
+		ss7_info->t10.sngss7_info	= ss7_info;
+
+		/* prepare the timer structures */
+		ss7_info->t39.sched		= ((sngss7_span_data_t *)(ftdmspan->signal_data))->sched;
+		ss7_info->t39.counter		= 1;
+		ss7_info->t39.beat		= (isupCkt->t39) * 100; /* beat is in ms, t39 is in 100ms */
+		ss7_info->t39.callback		= handle_isup_t39;
+		ss7_info->t39.sngss7_info	= ss7_info;
 
 
 	/**************************************************************************/

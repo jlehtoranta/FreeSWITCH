@@ -344,29 +344,15 @@ typedef enum zrtp_statemachine_type_t
  */
 struct zrtp_global_t
 {
-	/** ZRTP license mode. */
-	uint32_t				lic_mode;
-	
-	/** Local ZRTP client ID. */
-    zrtp_string16_t			client_id;
-	
-	/** Flags defines that the local endpoint acts as ZRTP MiTM. */
-	uint8_t					is_mitm;
-	
-    /** Hash context for entropy accumulation for the RNG unit. */
-    MD_CTX					rand_ctx;
-	
-    /** RNG unit initialization flag. */
-    uint8_t					rand_initialized;
-
-	/** Full path to ZRTP cache file. */
-	zrtp_string256_t		def_cache_path;
-	
-    /** This object is used to protect the shared RNG hash zrtp#rand_ctx */
-    zrtp_mutex_t*			rng_protector;
-    
-    /** This section provides static data for DH3K and DH4K components */
-    struct BigNum			one;
+	uint32_t				lic_mode;			/** ZRTP license mode. */
+    zrtp_string16_t			client_id;			/** Local ZRTP client ID. */
+	uint8_t					is_mitm;			/** Flags defines that the local endpoint acts as ZRTP MiTM. */
+    MD_CTX					rand_ctx;			/** Hash context for entropy accumulation for the RNG unit. */
+    uint8_t					rand_initialized;	/** RNG unit initialization flag. */
+	zrtp_string256_t		def_cache_path;		/** Full path to ZRTP cache file. */
+	unsigned				cache_auto_store;	/** Set when user wants libzrtp to flush the cache once it changed */
+    zrtp_mutex_t*			rng_protector;		/** This object is used to protect the shared RNG hash zrtp#rand_ctx */
+    struct BigNum			one;				/** This section provides static data for DH3K and DH4K components */
     struct BigNum			G;
 	struct BigNum			P_2048;
     struct BigNum			P_2048_1;
@@ -374,39 +360,17 @@ struct zrtp_global_t
     struct BigNum			P_3072_1;
 	uint8_t					P_2048_data[256];
     uint8_t					P_3072_data[384];
-    
-	/** Head of hash components list */
-    mlist_t					hash_head;
-	
-	/** Head of ciphers list */
-    mlist_t					cipher_head;
-	
-	/** Head of ATL components list */
-    mlist_t					atl_head;
-	
-	/** Head of public key exchange schemes list */
-    mlist_t					pktype_head;
-	
-	/** SAS schemes list */
-    mlist_t					sas_head;
-	    	
-	/** Storage for some SRTP global data */
-    void*					srtp_global;
-	
-	/** Head of ZRTP sessions list */
-    mlist_t					sessions_head;
-	
-	/** Global sessions count used to create ZRTP session IDs. For debug purposes mostly. */
-	uint32_t				sessions_count;
-	
-	/** Global streams count used to create ZRTP session IDs. For debug purposes mostly. */
-	uint32_t				streams_count;
-	
-    /** This object is used to synchronize sessions list operations */
-    zrtp_mutex_t*			sessions_protector;
-		
-	/** Set of feedback callbacks used by libzrtp to interact with the user-space.*/
-	zrtp_callback_t			cb;
+    mlist_t					hash_head;			/** Head of hash components list */
+    mlist_t					cipher_head;		/** Head of ciphers list */
+    mlist_t					atl_head;			/** Head of ATL components list */
+    mlist_t					pktype_head;		/** Head of public key exchange schemes list */
+    mlist_t					sas_head;			/** SAS schemes list */
+    void*					srtp_global;		/** Storage for some SRTP global data */
+    mlist_t					sessions_head;		/** Head of ZRTP sessions list */
+	uint32_t				sessions_count;		/** Global sessions count used to create ZRTP session IDs. For debug purposes mostly. */
+	uint32_t				streams_count;		/** Global streams count used to create ZRTP session IDs. For debug purposes mostly. */
+    zrtp_mutex_t*			sessions_protector;	/** This object is used to synchronize sessions list operations */
+	zrtp_callback_t			cb;					/** Set of feedback callbacks used by libzrtp to interact with the user-space.*/
 };
 
 
@@ -527,7 +491,12 @@ typedef struct zrtp_stream_mescache_t
 	zrtp_retry_task_t       errorack_task;
 	zrtp_retry_task_t       sasrelay_task;
 	
-	zrtp_string16_t			signaling_hash;	
+	/*!
+	 * Hash pre-image of the remote party Hello retrieved from Signaling. When
+	 * user calls zrtp_signaling_hash_set() libzrtp stores hash value in this
+	 * variable and checks all incoming Hello-s to prevent DOS attacks.
+	 */
+	zrtp_string64_t			signaling_hash;
 } zrtp_stream_mescache_t;
 
 
@@ -722,14 +691,7 @@ struct zrtp_stream_t
 	 * crypto sources and performs traffic encryption/decryption.
 	 */
 	zrtp_protocol_t			*protocol;
-	
-	/*!
-	 * Hash pre-image of the remote party Hello retrieved from Signaling. When
-	 * user calls zrtp_signaling_hash_set() libzrtp stores hash value in this
-	 * variable and checks all incoming Hellos to prevent DOS attacks.
-	 */
-	zrtp_string128_t		signaling_hash;
-	
+
 	/*!< Holder for RTP/ZRTP media stream options. */
 	zrtp_media_context_t	media_ctx;
 	

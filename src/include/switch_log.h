@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -64,6 +64,7 @@ SWITCH_BEGIN_EXTERN_C
 	char *userdata;
 	/* To maintain abi, only add new elements to the end of this struct and do not delete any elements */
 	switch_text_channel_t channel;
+	switch_log_level_t slevel;
 } switch_log_node_t;
 
 typedef switch_status_t (*switch_log_function_t) (const switch_log_node_t *node, switch_log_level_t level);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009, Anthony Minessale II
+ * Copyright (c) 2009-2012, Anthony Minessale II
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,17 +30,37 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-typedef enum {
-        SERVICE_CHANGE_STATUS_INSERVICE = 0,
-        SERVICE_CHANGE_STATUS_MAINTENANCE = 1,
-        SERVICE_CHANGE_STATUS_OUTOFSERVICE = 2
-} service_change_status_t;     
-
 #ifndef FTMOD_LIBPRI_H
 #define FTMOD_LIBPRI_H
 #include "freetdm.h"
 #include "lpwrap_pri.h"
+
+/* T302 Overlap receiving inter-digit timeout */
+#define OVERLAP_TIMEOUT_MS_DEFAULT	5000	/* 5 sec */
+#define OVERLAP_TIMEOUT_MS_MIN		3000	/* 3 sec */
+#define OVERLAP_TIMEOUT_MS_MAX		30000	/* 30 sec */
+
+/* NT-mode idle b-channel restart timer */
+#define IDLE_RESTART_TIMEOUT_MS_DEFAULT	0		/* disabled */
+#define IDLE_RESTART_TIMEOUT_MS_MIN	10000		/* 10 sec */
+#define IDLE_RESTART_TIMEOUT_MS_MAX	86400000	/* 1 day */
+
+/* T316 RESTART ACK wait timer */
+#define T316_TIMEOUT_MS_DEFAULT		30000	/* 30 sec */
+#define T316_TIMEOUT_MS_MIN		10000	/* 10 sec */
+#define T316_TIMEOUT_MS_MAX		300000	/* 5 min  */
+
+/* T316 restart attempts until channel is suspended */
+#define T316_ATTEMPT_LIMIT_DEFAULT	3
+#define T316_ATTEMPT_LIMIT_MIN		1
+#define T316_ATTEMPT_LIMIT_MAX		10
+
+
+typedef enum {
+        SERVICE_CHANGE_STATUS_INSERVICE = 0,
+        SERVICE_CHANGE_STATUS_MAINTENANCE,
+        SERVICE_CHANGE_STATUS_OUTOFSERVICE
+} service_change_status_t;
 
 typedef enum {
 	FTMOD_LIBPRI_OPT_NONE = 0,
@@ -72,14 +92,49 @@ struct ftdm_libpri_data {
 	int mode;
 	int dialect;
 	int overlap;		/*!< Overlap dial flags */
+	int overlap_timeout_ms;	/*!< Overlap dial timeout */
+	int idle_restart_timeout_ms;	/*!< NT-mode idle b-channel restart */
+	int t316_timeout_ms;	/*!< T316 RESTART ACK timeout */
+	int t316_max_attempts;	/*!< T316 timeout limit */
 	unsigned int layer1;
 	unsigned int ton;
 	unsigned int service_message_support;
 
 	lpwrap_pri_t spri;
+
+	/* MSN filter */
+	ftdm_hash_t *msn_hash;
+	ftdm_mutex_t *msn_mutex;
+
+	/* NT-mode idle restart timer */
+	struct lpwrap_timer t3xx;
 };
 
 typedef struct ftdm_libpri_data ftdm_libpri_data_t;
+
+
+/*
+ * b-channel flags
+ */
+enum {
+	FTDM_LIBPRI_B_NONE = 0,
+	FTDM_LIBPRI_B_REMOTE_RESTART = (1 << 0),	/*!< Remote triggered channel restart */
+};
+
+/**
+ * Per-b-channel private data
+ */
+struct ftdm_libpri_b_chan {
+	struct lpwrap_timer t302;	/*!< T302 overlap receive timer */
+	struct lpwrap_timer t316;	/*!< T316 restart ack timer */
+	ftdm_channel_t *channel;	/*!< back-pointer to b-channel */
+	q931_call *call;		/*!< libpri opaque call handle */
+	uint32_t flags;			/*!< channel flags */
+	uint32_t t316_timeout_cnt;	/*!< T316 timeout counter */
+	int peerhangup;			/*!< hangup requested from libpri (RELEASE/RELEASE_ACK/DL_RELEASE/TIMERS EXPIRY) */
+};
+
+typedef struct ftdm_libpri_b_chan ftdm_libpri_b_chan_t;
 
 #endif
 

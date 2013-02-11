@@ -71,6 +71,7 @@ SWITCH_DECLARE(char *) getGlobalVariable(char *var_name);
 
 SWITCH_DECLARE(void) consoleLog(char *level_str, char *msg);
 SWITCH_DECLARE(void) consoleCleanLog(char *msg);
+SWITCH_DECLARE(bool) running(void);
 
 SWITCH_DECLARE(bool) email(char *to, char *from, char *headers = NULL, char *body = NULL,
     char *file = NULL, char *convert_cmd = NULL, char *convert_ext = NULL);
@@ -177,6 +178,7 @@ SWITCH_DECLARE(bool) email(char *to, char *from, char *headers = NULL, char *bod
      class EventConsumer {
 	 protected:
 		 switch_memory_pool_t *pool;
+		 int ready;
 	 public:
 		 switch_queue_t *events;
 		 switch_event_types_t e_event_id;
@@ -186,10 +188,11 @@ SWITCH_DECLARE(bool) email(char *to, char *from, char *headers = NULL, char *bod
 		 switch_event_node_t *enodes[SWITCH_EVENT_ALL + 1];
 		 uint32_t node_index;
 
-		 SWITCH_DECLARE_CONSTRUCTOR EventConsumer(const char *event_name = NULL, const char *subclass_name = "");
+		 SWITCH_DECLARE_CONSTRUCTOR EventConsumer(const char *event_name = NULL, const char *subclass_name = "", int len = 5000);
 		 SWITCH_DECLARE_CONSTRUCTOR ~ EventConsumer();
 		 SWITCH_DECLARE(int) bind(const char *event_name, const char *subclass_name = "");
 		 SWITCH_DECLARE(Event *) pop(int block = 0, int timeout = 0);
+		 SWITCH_DECLARE(void) cleanup();
 	 };
 
 #ifdef SWIG
@@ -283,6 +286,7 @@ SWITCH_DECLARE(bool) email(char *to, char *from, char *headers = NULL, char *bod
 
 		 SWITCH_DECLARE(int) speak(char *text);
 		 SWITCH_DECLARE(void) set_tts_parms(char *tts_name, char *voice_name);
+		 SWITCH_DECLARE(void) set_tts_params(char *tts_name, char *voice_name);
 
 	/**
 	 * For timeout milliseconds, call the dtmf function set previously

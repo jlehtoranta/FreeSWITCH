@@ -38,13 +38,6 @@ to maximum the tolerance of jitter and packet loss on the IP network.
 \section t38_gateway_page_sec_2 How does it work?
 */
 
-/*! The receive buffer length */
-#define T38_RX_BUF_LEN          2048
-/*! The number of HDLC transmit buffers */
-#define T38_TX_HDLC_BUFS        256
-/*! The maximum length of an HDLC frame buffer. This must be big enough for ECM frames. */
-#define T38_MAX_HDLC_LEN        260
-
 typedef struct t38_gateway_state_s t38_gateway_state_t;
 
 /*!
@@ -56,11 +49,11 @@ typedef struct t38_gateway_state_s t38_gateway_state_t;
     \param msg The HDLC message.
     \param len The length of the message.
 */
-typedef void (t38_gateway_real_time_frame_handler_t)(t38_gateway_state_t *s,
-                                                     void *user_data,
-                                                     int direction,
-                                                     const uint8_t *msg,
-                                                     int len);
+typedef void (*t38_gateway_real_time_frame_handler_t)(t38_gateway_state_t *s,
+                                                      void *user_data,
+                                                      int direction,
+                                                      const uint8_t *msg,
+                                                      int len);
 
 /*!
     T.38 gateway results.
@@ -86,7 +79,7 @@ extern "C"
     \param tx_packet_user_data An opaque pointer passed to the tx_packet_handler routine.
     \return A pointer to the termination mode T.38 context, or NULL if there was a problem. */
 SPAN_DECLARE(t38_gateway_state_t *) t38_gateway_init(t38_gateway_state_t *s,
-                                                     t38_tx_packet_handler_t *tx_packet_handler,
+                                                     t38_tx_packet_handler_t tx_packet_handler,
                                                      void *tx_packet_user_data);
 
 /*! Release a gateway mode T.38 context.
@@ -212,7 +205,7 @@ SPAN_DECLARE(logging_state_t *) t38_gateway_get_logging_state(t38_gateway_state_
     \param handler The callback function.
     \param user_data An opaque pointer passed to the callback function. */
 SPAN_DECLARE(void) t38_gateway_set_real_time_frame_handler(t38_gateway_state_t *s,
-                                                           t38_gateway_real_time_frame_handler_t *handler,
+                                                           t38_gateway_real_time_frame_handler_t handler,
                                                            void *user_data);
 
 #if defined(__cplusplus)

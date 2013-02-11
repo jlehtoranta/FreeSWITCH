@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -273,6 +273,7 @@ SWITCH_DECLARE(const char *) switch_channel_get_hold_music_partner(switch_channe
 
 SWITCH_DECLARE(uint32_t) switch_channel_del_variable_prefix(switch_channel_t *channel, const char *prefix);
 
+#define switch_channel_set_variable_safe(_channel, _var, _val) switch_channel_set_variable_var_check(_channel, _var, _val, SWITCH_FALSE)
 #define switch_channel_set_variable(_channel, _var, _val) switch_channel_set_variable_var_check(_channel, _var, _val, SWITCH_TRUE)
 #define switch_channel_set_variable_partner(_channel, _var, _val) switch_channel_set_variable_partner_var_check(_channel, _var, _val, SWITCH_TRUE)
 
@@ -540,6 +541,10 @@ SWITCH_DECLARE(switch_channel_state_t) switch_channel_perform_hangup(switch_chan
   \return number of digits in the queue
 */
 SWITCH_DECLARE(switch_size_t) switch_channel_has_dtmf(_In_ switch_channel_t *channel);
+SWITCH_DECLARE(switch_status_t) switch_channel_dtmf_lock(switch_channel_t *channel); 
+SWITCH_DECLARE(switch_status_t) switch_channel_try_dtmf_lock(switch_channel_t *channel);
+SWITCH_DECLARE(switch_status_t) switch_channel_dtmf_unlock(switch_channel_t *channel); 
+
 
 /*!
   \brief Queue DTMF on a given channel
@@ -592,8 +597,8 @@ SWITCH_DECLARE(void) switch_channel_event_set_extended_data(_In_ switch_channel_
   \return the original string if no expansion takes place otherwise a new string that must be freed
   \note it's necessary to test if the return val is the same as the input and free the string if it is not.
 */
-SWITCH_DECLARE(char *) switch_channel_expand_variables_check(switch_channel_t *channel, const char *in, switch_event_t *var_list, switch_event_t *api_list);
-#define switch_channel_expand_variables(_channel, _in) switch_channel_expand_variables_check(_channel, _in, NULL, NULL)
+SWITCH_DECLARE(char *) switch_channel_expand_variables_check(switch_channel_t *channel, const char *in, switch_event_t *var_list, switch_event_t *api_list, uint32_t recur);
+#define switch_channel_expand_variables(_channel, _in) switch_channel_expand_variables_check(_channel, _in, NULL, NULL, 0)
 
 
 SWITCH_DECLARE(char *) switch_channel_build_param_string(_In_ switch_channel_t *channel, _In_opt_ switch_caller_profile_t *caller_profile,
@@ -630,7 +635,7 @@ SWITCH_DECLARE(void) switch_channel_perform_set_callstate(switch_channel_t *chan
 #define switch_channel_set_callstate(channel, state) switch_channel_perform_set_callstate(channel, state, __FILE__, __SWITCH_FUNC__, __LINE__)
 SWITCH_DECLARE(switch_channel_callstate_t) switch_channel_get_callstate(switch_channel_t *channel);
 SWITCH_DECLARE(const char *) switch_channel_callstate2str(switch_channel_callstate_t callstate);
-SWITCH_DECLARE(switch_call_cause_t) switch_channel_str2callstate(const char *str);
+SWITCH_DECLARE(switch_channel_callstate_t) switch_channel_str2callstate(const char *str);
 SWITCH_DECLARE(void) switch_channel_mark_hold(switch_channel_t *channel, switch_bool_t on);
 
 /** @} */
@@ -640,6 +645,10 @@ SWITCH_DECLARE(switch_status_t) switch_channel_api_on(switch_channel_t *channel,
 
 SWITCH_DECLARE(switch_caller_extension_t *) switch_channel_get_queued_extension(switch_channel_t *channel);
 SWITCH_DECLARE(void) switch_channel_transfer_to_extension(switch_channel_t *channel, switch_caller_extension_t *caller_extension);
+SWITCH_DECLARE(const char *) switch_channel_get_partner_uuid(switch_channel_t *channel);
+SWITCH_DECLARE(switch_hold_record_t *) switch_channel_get_hold_record(switch_channel_t *channel);
+SWITCH_DECLARE(void) switch_channel_state_thread_lock(switch_channel_t *channel);
+SWITCH_DECLARE(void) switch_channel_state_thread_unlock(switch_channel_t *channel);
 
 SWITCH_END_EXTERN_C
 #endif

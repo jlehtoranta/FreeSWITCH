@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -70,6 +70,7 @@ SWITCH_BEGIN_EXTERN_C
 	switch_bool_t m;
 	/*! frame flags */
 	switch_frame_flag_t flags;
+	void *user_data;
 };
 
 SWITCH_END_EXTERN_C

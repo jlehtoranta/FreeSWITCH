@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -1157,7 +1157,7 @@ static switch_call_cause_t channel_outgoing_channel(switch_core_session_t *sessi
 		return retcause;
 	}
 
-	if (!(*new_session = switch_core_session_request(portaudio_endpoint_interface, SWITCH_CALL_DIRECTION_OUTBOUND, flags, pool))) {
+	if (!(*new_session = switch_core_session_request_uuid(portaudio_endpoint_interface, SWITCH_CALL_DIRECTION_OUTBOUND, flags, pool, switch_event_get_header(var_event, "origination_uuid")))) {
 		return retcause;
 	}
 
@@ -2806,6 +2806,9 @@ static switch_status_t answer_call(char **argv, int argc, switch_stream_handle_t
 			} else {
 				switch_channel_t *channel = switch_core_session_get_channel(tp->session);
 				switch_set_flag_locked(tp, TFLAG_ANSWER);
+				if (tp != globals.call_list) {
+					remove_pvt(tp);
+				}
 				add_pvt(tp, PA_MASTER);
 				switch_channel_mark_answered(channel);
 			}

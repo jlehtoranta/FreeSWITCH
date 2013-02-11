@@ -52,6 +52,7 @@ package freeswitch;
 *getGlobalVariable = *freeswitchc::getGlobalVariable;
 *consoleLog = *freeswitchc::consoleLog;
 *consoleCleanLog = *freeswitchc::consoleCleanLog;
+*running = *freeswitchc::running;
 *email = *freeswitchc::email;
 *console_log = *freeswitchc::console_log;
 *console_clean_log = *freeswitchc::console_clean_log;
@@ -358,6 +359,7 @@ sub DESTROY {
 
 *bind = *freeswitchc::EventConsumer_bind;
 *pop = *freeswitchc::EventConsumer_pop;
+*cleanup = *freeswitchc::EventConsumer_cleanup;
 sub DISOWN {
     my $self = shift;
     my $ptr = tied(%$self);

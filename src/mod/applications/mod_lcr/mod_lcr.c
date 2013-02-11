@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -25,6 +25,7 @@
  * 
  * Raymond Chandler <intralanman@gmail.com>
  * Rupa Schomaker <rupa@rupa.com>
+ * Emmanuel Schmidbauer <e.schmidbauer@gmail.com>
  *
  * mod_lcr.c -- Least Cost Routing Module
  *
@@ -116,6 +117,7 @@ struct profile_obj {
 	
 	switch_bool_t reorder_by_rate;
 	switch_bool_t quote_in_list;
+	switch_bool_t single_bridge;
 	switch_bool_t info_in_headers;
 	switch_bool_t enable_sip_redir;
 };
@@ -142,8 +144,6 @@ static struct {
 	switch_memory_pool_t *pool;
 	char *dbname;
 	char *odbc_dsn;
-	char *odbc_user;
-	char *odbc_pass;
 	switch_mutex_t *mutex;
 	switch_hash_t *profile_hash;
 	profile_t *default_profile;
@@ -430,16 +430,19 @@ static switch_status_t process_max_lengths(max_obj_t *maxes, lcr_route routes, c
 
 static switch_cache_db_handle_t *lcr_get_db_handle(void)
 {
-	switch_cache_db_connection_options_t options = { {0} };
 	switch_cache_db_handle_t *dbh = NULL;
+	char *dsn;
 	
 	if (!zstr(globals.odbc_dsn)) {
-		options.odbc_options.dsn = globals.odbc_dsn;
-		options.odbc_options.user = globals.odbc_user;
-		options.odbc_options.pass = globals.odbc_pass;
-
-		if (switch_cache_db_get_db_handle(&dbh, SCDB_TYPE_ODBC, &options) != SWITCH_STATUS_SUCCESS) dbh = NULL;
+		dsn = globals.odbc_dsn;
+	} else {
+		dsn = globals.dbname;
 	}
+
+	if (switch_cache_db_get_db_handle_dsn(&dbh, dsn) != SWITCH_STATUS_SUCCESS) {
+		dbh = NULL;
+	}
+	
 	return dbh;
 }
 
@@ -603,6 +606,7 @@ static int route_add_callback(void *pArg, int argc, char **argv, char **columnNa
 	lcr_route current = NULL;
 	callback_t *cbt = (callback_t *) pArg;
 	char *key = NULL;
+	char *key2 = NULL;
 	int i = 0;
 	int r = 0;
 	switch_bool_t lcr_skipped = SWITCH_TRUE; /* assume we'll throw it away, paranoid about leak */
@@ -670,14 +674,22 @@ static int route_add_callback(void *pArg, int argc, char **argv, char **columnNa
 			lcr_skipped = SWITCH_FALSE;
 			r = 0; goto end;
 		}
-
 		key = switch_core_sprintf(pool, "%s:%s", additional->gw_prefix, additional->gw_suffix);
+		if (cbt->profile->single_bridge) {
+			key2 = switch_core_sprintf(pool, "%s", additional->carrier_name);
+		}
 		additional->next = cbt->head;
 		cbt->head = additional;
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Adding %s to head of list\n", additional->carrier_name);
 		if (switch_core_hash_insert(cbt->dedup_hash, key, additional) != SWITCH_STATUS_SUCCESS) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error inserting into dedup hash\n");
 			r = -1; goto end;
+		}
+		if (cbt->profile->single_bridge) {
+			if (switch_core_hash_insert(cbt->dedup_hash, key2, additional) != SWITCH_STATUS_SUCCESS) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error inserting into dedup hash\n");
+				r = -1; goto end;
+			}
 		}
 		lcr_skipped = SWITCH_FALSE;
 		r = 0; goto end;
@@ -699,6 +711,16 @@ static int route_add_callback(void *pArg, int argc, char **argv, char **columnNa
 			break;
 		}
 
+		if (cbt->profile->single_bridge) {
+			key2 = switch_core_sprintf(pool, "%s", additional->carrier_name);
+			if (switch_core_hash_find(cbt->dedup_hash, key2)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG,
+								"Ignoring duplicate carrier gateway for single bridge. (%s)\n",
+								key2);
+				break;
+			}
+		}
+
 		if (!cbt->profile->reorder_by_rate) {
 			/* use db order */
 			if (current->next == NULL) {
@@ -708,6 +730,12 @@ static int route_add_callback(void *pArg, int argc, char **argv, char **columnNa
 				if (switch_core_hash_insert(cbt->dedup_hash, key, additional) != SWITCH_STATUS_SUCCESS) {
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error inserting into dedup hash\n");
 					r = -1; goto end;
+				}
+				if (cbt->profile->single_bridge) {
+					if (switch_core_hash_insert(cbt->dedup_hash, key2, additional) != SWITCH_STATUS_SUCCESS) {
+						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error inserting into dedup hash\n");
+						r = -1; goto end;
+					}
 				}
 				lcr_skipped = SWITCH_FALSE;
 				break;
@@ -731,6 +759,12 @@ static int route_add_callback(void *pArg, int argc, char **argv, char **columnNa
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error inserting into dedup hash\n");
 					r = -1; goto end;
 				}
+				if (cbt->profile->single_bridge) {
+					if (switch_core_hash_insert(cbt->dedup_hash, key2, additional) != SWITCH_STATUS_SUCCESS) {
+						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error inserting into dedup hash\n");
+						r = -1; goto end;
+					}
+				}
 				lcr_skipped = SWITCH_FALSE;
 				break;
 			} else if (current->next == NULL) {
@@ -741,6 +775,12 @@ static int route_add_callback(void *pArg, int argc, char **argv, char **columnNa
 				if (switch_core_hash_insert(cbt->dedup_hash, key, additional) != SWITCH_STATUS_SUCCESS) {
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error inserting into dedup hash\n");
 					r = -1; goto end;
+				}
+				if (cbt->profile->single_bridge) {
+					if (switch_core_hash_insert(cbt->dedup_hash, key2, additional) != SWITCH_STATUS_SUCCESS) {
+						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error inserting into dedup hash\n");
+						r = -1; goto end;
+					}
 				}
 				lcr_skipped = SWITCH_FALSE;
 				break;
@@ -998,12 +1038,6 @@ static switch_status_t lcr_load_config()
 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "odbc_dsn is %s\n", val);
 				switch_safe_free(globals.odbc_dsn);
 				globals.odbc_dsn = strdup(val);
-				if ((globals.odbc_user = strchr(globals.odbc_dsn, ':'))) {
-					*globals.odbc_user++ = '\0';
-					if ((globals.odbc_pass = strchr(globals.odbc_user, ':'))) {
-						*globals.odbc_pass++ = '\0';
-					}
-				}
 			}
 		}
 	}
@@ -1011,8 +1045,8 @@ static switch_status_t lcr_load_config()
 	/* initialize sql here, 'cause we need to verify custom_sql for each profile below */
 	if (globals.odbc_dsn) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG
-						  , "dsn is \"%s\", user is \"%s\"\n"
-						  , globals.odbc_dsn, globals.odbc_user
+						  , "dsn is \"%s\"\n"
+						  , globals.odbc_dsn
 						  );
 		if (!(dbh = lcr_get_db_handle())) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Cannot Open ODBC Database!\n");
@@ -1035,6 +1069,7 @@ static switch_status_t lcr_load_config()
 			switch_stream_handle_t *thisorder = NULL;
 			char *reorder_by_rate = NULL;
 			char *quote_in_list = NULL;
+			char *single_bridge = NULL;
 			char *info_in_headers = NULL;
 			char *enable_sip_redir = NULL;
 			char *id_s = NULL;
@@ -1091,6 +1126,9 @@ static switch_status_t lcr_load_config()
 					info_in_headers = val;
 				} else if (!strcasecmp(var, "quote_in_list") && !zstr(val)) {
 					quote_in_list = val;
+				} else if (!strcasecmp(var, "single_bridge") && !zstr(val)) {
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Single bridge mode set to %s.\n", val);
+					single_bridge = val;
 				} else if (!strcasecmp(var, "export_fields") && !zstr(val)) {
 					export_fields = val;
 				} else if (!strcasecmp(var, "limit_type") && !zstr(val)) {
@@ -1223,7 +1261,11 @@ static switch_status_t lcr_load_config()
 				if (!zstr(quote_in_list)) {
 					profile->quote_in_list = switch_true(quote_in_list);
 				}
-				
+
+				if (!zstr(single_bridge)) {
+					profile->single_bridge = switch_true(single_bridge);
+				}
+
 				if (!zstr(export_fields)) {
 					int argc2 = 0;
 					char *argv2[50] = { 0 };
@@ -1241,10 +1283,10 @@ static switch_status_t lcr_load_config()
 					if (!strcasecmp(limit_type, "hash")) {
 						profile->limit_type = "hash";
 					} else {
-						profile->limit_type = "sql";
+						profile->limit_type = "db";
 					}
 				} else {
-					profile->limit_type = "sql";
+					profile->limit_type = "db";
 				}
 				
 				switch_core_hash_insert(globals.profile_hash, profile->name, profile);
@@ -1323,7 +1365,7 @@ static switch_call_cause_t lcr_outgoing_channel(switch_core_session_t *session,
 	switch_event_t *event = NULL;
 	const char *intrastate = NULL;
 	const char *intralata = NULL;
-	switch_core_session_t *mysession = NULL;
+	switch_core_session_t *mysession = NULL, *locked_session = NULL;
 	switch_channel_t *channel = NULL;
 	
 	dest = strdup(outbound_profile->destination_number);
@@ -1367,7 +1409,7 @@ static switch_call_cause_t lcr_outgoing_channel(switch_core_session_t *session,
 	} else if (var_event) {
 		char *session_uuid = switch_event_get_header(var_event, "ent_originate_aleg_uuid");
 		if (session_uuid) {
-			mysession = switch_core_session_locate(session_uuid);
+			mysession = locked_session = switch_core_session_locate(session_uuid);
 		}
 		cid_name_override = switch_event_get_header(var_event, "origination_caller_id_name");
 		cid_num_override = switch_event_get_header(var_event, "origination_caller_id_number");
@@ -1469,8 +1511,8 @@ static switch_call_cause_t lcr_outgoing_channel(switch_core_session_t *session,
 	if (event) {
 		switch_event_destroy(&event);
 	}
-	if (mysession) {
-		switch_core_session_rwunlock(mysession);
+	if (locked_session) {
+		switch_core_session_rwunlock(locked_session);
 	}
 	lcr_destroy(routes.head);
 	switch_core_destroy_memory_pool(&pool);
@@ -1994,6 +2036,7 @@ SWITCH_STANDARD_API(dialplan_lcr_admin_function)
 				stream->write_function(stream, " Reorder rate:\t%s\n", profile->reorder_by_rate ? "enabled" : "disabled");
 				stream->write_function(stream, " Info in headers:\t%s\n", profile->info_in_headers ? "enabled" : "disabled");
 				stream->write_function(stream, " Quote IN() List:\t%s\n", profile->quote_in_list ? "enabled" : "disabled");
+				stream->write_function(stream, " Single Bridge:\t%s\n", profile->single_bridge ? "enabled" : "disabled");
 				stream->write_function(stream, " Sip Redirection Mode:\t%s\n", profile->enable_sip_redir ? "enabled" : "disabled");
 				stream->write_function(stream, " Import fields:\t%s\n", profile->export_fields_str ? profile->export_fields_str : "(null)");
 				stream->write_function(stream, " Limit type:\t%s\n", profile->limit_type);
@@ -2020,12 +2063,6 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_lcr_load)
 	switch_dialplan_interface_t *dp_interface;
 	
 	*module_interface = switch_loadable_module_create_module_interface(pool, modname);
-
-	if (!switch_odbc_available()) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "You must have ODBC support in FreeSWITCH to use this module\n");
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "\t./configure --enable-core-odbc-support\n");
-		return SWITCH_STATUS_FALSE;
-	}
 
 	globals.pool = pool;
 

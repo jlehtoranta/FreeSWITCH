@@ -29,13 +29,15 @@
 \section fax_tests_page_sec_1 What does it do?
 These tests exercise the following FAX to FAX paths:
 
-         +--Modems-+---------TDM/RTP---------+-Modems--+
-         |          \                       /          |
-         |           \                     /           |
-T.30 <---+      T.38 gateway        T.38 gateway       +--->T.30
-         |             \                 /             |
-         |              \               /              |
-         +---T.38--------+--UDPTL/RTP--+--------T.38---+
+         +--Modems-+-----------TDM/RTP-----------+-Modems--+
+         |          \                           /          |
+         |           \                         /           |
+T.30 <---+      T.38 gateway            T.38 gateway       +--->T.30
+         |             \                     /             |
+         |              \                   /              |
+         +---T.38---+----+----UDPTL/RTP----+----+---T.38---+
+                     \                         /
+                      +----------TCP----------+
 
 T.30<->Modems<-------------------------TDM/RTP------------------------->Modems<->T.30
 T.30<->Modems<-TDM/RTP->T.38 gateway<-UDPTL/RTP->T.38 gateway<-TDM/RTP->Modems<->T.30
@@ -44,9 +46,6 @@ T.30<->T.38<--------------------------UDPTL/RTP->T.38 gateway<-TDM/RTP->Modems<-
 T.30<->T.38<--------------------------UDPTL/RTP-------------------------->T.38<->T.30
 
 */
-
-/* Enable the following definition to enable direct probing into the FAX structures */
-//#define WITH_SPANDSP_INTERNALS
 
 #if defined(HAVE_CONFIG_H)
 #include "config.h"
@@ -77,10 +76,6 @@ T.30<->T.38<--------------------------UDPTL/RTP-------------------------->T.38<-
 #if defined(HAVE_LIBXML_XINCLUDE_H)
 #include <libxml/xinclude.h>
 #endif
-
-//#if defined(WITH_SPANDSP_INTERNALS)
-#define SPANDSP_EXPOSE_INTERNAL_STRUCTURES
-//#endif
 
 #include "udptl.h"
 #include "spandsp.h"
@@ -863,10 +858,23 @@ int main(int argc, char *argv[])
                                     | T30_SUPPORT_300_600_RESOLUTION
                                     | T30_SUPPORT_400_800_RESOLUTION
                                     | T30_SUPPORT_600_1200_RESOLUTION);
-
         t30_set_ecm_capability(t30_state[i], use_ecm);
         if (use_ecm)
-            t30_set_supported_compressions(t30_state[i], T30_SUPPORT_T4_1D_COMPRESSION | T30_SUPPORT_T4_2D_COMPRESSION | T30_SUPPORT_T6_COMPRESSION);
+        {
+            t30_set_supported_compressions(t30_state[i],
+                                           T30_SUPPORT_T4_1D_COMPRESSION
+                                         | T30_SUPPORT_T4_2D_COMPRESSION
+                                         | T30_SUPPORT_T6_COMPRESSION
+                                         | T30_SUPPORT_T81_COMPRESSION
+                                         | T30_SUPPORT_T85_COMPRESSION
+                                         | T30_SUPPORT_T85_L0_COMPRESSION);
+        }
+        else
+        {
+            t30_set_supported_compressions(t30_state[i],
+                                           T30_SUPPORT_T4_1D_COMPRESSION
+                                         | T30_SUPPORT_T4_2D_COMPRESSION);
+        }
         t30_set_minimum_scan_line_time(t30_state[i], scan_line_time);
 
         if (mode[i] == T38_GATEWAY_FAX)
@@ -1126,7 +1134,7 @@ int main(int argc, char *argv[])
         exit(2);
     }
     printf("Tests passed\n");
-    return  0;
+    return 0;
 }
 /*- End of function --------------------------------------------------------*/
 /*- End of file ------------------------------------------------------------*/

@@ -199,6 +199,7 @@ static void SWIGUNUSED SWIG_JavaThrowException(JNIEnv *jenv, SWIG_JavaExceptionC
 #define SWIG_contract_assert(nullreturn, expr, msg) if (!(expr)) {SWIG_JavaThrowException(jenv, SWIG_JavaIllegalArgumentException, msg); return nullreturn; } else
 
 
+#include "switch.h"
 #include "switch_cpp.h"
 #include "freeswitch_java.h"
 
@@ -283,6 +284,18 @@ SWIGEXPORT void JNICALL Java_org_freeswitch_swig_freeswitchJNI_consoleCleanLog(J
   }
   consoleCleanLog(arg1);
   if (arg1) jenv->ReleaseStringUTFChars(jarg1, (const char *)arg1);
+}
+
+
+SWIGEXPORT jboolean JNICALL Java_org_freeswitch_swig_freeswitchJNI_running(JNIEnv *jenv, jclass jcls) {
+  jboolean jresult = 0 ;
+  bool result;
+  
+  (void)jenv;
+  (void)jcls;
+  result = (bool)running();
+  jresult = (jboolean)result; 
+  return jresult;
 }
 
 
@@ -1587,10 +1600,11 @@ SWIGEXPORT jlong JNICALL Java_org_freeswitch_swig_freeswitchJNI_EventConsumer_1n
 }
 
 
-SWIGEXPORT jlong JNICALL Java_org_freeswitch_swig_freeswitchJNI_new_1EventConsumer(JNIEnv *jenv, jclass jcls, jstring jarg1, jstring jarg2) {
+SWIGEXPORT jlong JNICALL Java_org_freeswitch_swig_freeswitchJNI_new_1EventConsumer(JNIEnv *jenv, jclass jcls, jstring jarg1, jstring jarg2, jint jarg3) {
   jlong jresult = 0 ;
   char *arg1 = (char *) NULL ;
   char *arg2 = (char *) "" ;
+  int arg3 = (int) 5000 ;
   EventConsumer *result = 0 ;
   
   (void)jenv;
@@ -1605,7 +1619,8 @@ SWIGEXPORT jlong JNICALL Java_org_freeswitch_swig_freeswitchJNI_new_1EventConsum
     arg2 = (char *)jenv->GetStringUTFChars(jarg2, 0);
     if (!arg2) return 0;
   }
-  result = (EventConsumer *)new EventConsumer((char const *)arg1,(char const *)arg2);
+  arg3 = (int)jarg3; 
+  result = (EventConsumer *)new EventConsumer((char const *)arg1,(char const *)arg2,arg3);
   *(EventConsumer **)&jresult = result; 
   if (arg1) jenv->ReleaseStringUTFChars(jarg1, (const char *)arg1);
   if (arg2) jenv->ReleaseStringUTFChars(jarg2, (const char *)arg2);
@@ -1669,6 +1684,17 @@ SWIGEXPORT jlong JNICALL Java_org_freeswitch_swig_freeswitchJNI_EventConsumer_1p
   result = (Event *)(arg1)->pop(arg2,arg3);
   *(Event **)&jresult = result; 
   return jresult;
+}
+
+
+SWIGEXPORT void JNICALL Java_org_freeswitch_swig_freeswitchJNI_EventConsumer_1cleanup(JNIEnv *jenv, jclass jcls, jlong jarg1, jobject jarg1_) {
+  EventConsumer *arg1 = (EventConsumer *) 0 ;
+  
+  (void)jenv;
+  (void)jcls;
+  (void)jarg1_;
+  arg1 = *(EventConsumer **)&jarg1; 
+  (arg1)->cleanup();
 }
 
 
@@ -3174,6 +3200,16 @@ SWIGEXPORT jlong JNICALL Java_org_freeswitch_swig_freeswitchJNI_javaVM_1get(JNIE
 }
 
 
+SWIGEXPORT void JNICALL Java_org_freeswitch_swig_freeswitchJNI_setOriginateStateHandler(JNIEnv *jenv, jclass jcls, jobject jarg1) {
+  jobject arg1 ;
+  
+  (void)jenv;
+  (void)jcls;
+  arg1 = jarg1; 
+  setOriginateStateHandler(arg1);
+}
+
+
 SWIGEXPORT jlong JNICALL Java_org_freeswitch_swig_freeswitchJNI_new_1JavaSession_1_1SWIG_10(JNIEnv *jenv, jclass jcls) {
   jlong jresult = 0 ;
   JavaSession *result = 0 ;
@@ -3325,6 +3361,33 @@ SWIGEXPORT jlong JNICALL Java_org_freeswitch_swig_freeswitchJNI_JavaSession_1run
   arg3 = *argp3; 
   result = (arg1)->run_dtmf_callback(arg2,arg3);
   *(switch_status_t **)&jresult = new switch_status_t((switch_status_t &)result); 
+  return jresult;
+}
+
+
+SWIGEXPORT jint JNICALL Java_org_freeswitch_swig_freeswitchJNI_JavaSession_1originate(JNIEnv *jenv, jclass jcls, jlong jarg1, jobject jarg1_, jlong jarg2, jobject jarg2_, jstring jarg3, jint jarg4) {
+  jint jresult = 0 ;
+  JavaSession *arg1 = (JavaSession *) 0 ;
+  JavaSession *arg2 = (JavaSession *) 0 ;
+  char *arg3 = (char *) 0 ;
+  int arg4 ;
+  int result;
+  
+  (void)jenv;
+  (void)jcls;
+  (void)jarg1_;
+  (void)jarg2_;
+  arg1 = *(JavaSession **)&jarg1; 
+  arg2 = *(JavaSession **)&jarg2; 
+  arg3 = 0;
+  if (jarg3) {
+    arg3 = (char *)jenv->GetStringUTFChars(jarg3, 0);
+    if (!arg3) return 0;
+  }
+  arg4 = (int)jarg4; 
+  result = (int)(arg1)->originate(arg2,arg3,arg4);
+  jresult = (jint)result; 
+  if (arg3) jenv->ReleaseStringUTFChars(jarg3, (const char *)arg3);
   return jresult;
 }
 

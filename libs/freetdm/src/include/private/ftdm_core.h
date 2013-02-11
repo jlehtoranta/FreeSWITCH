@@ -92,7 +92,7 @@
 			   !strcasecmp(expr, "true") ||		\
 			   !strcasecmp(expr, "enabled") ||	\
 			   !strcasecmp(expr, "active") ||	\
-			   atoi(expr))) ? 1 : 0
+			   atoi(expr))) ? FTDM_TRUE : FTDM_FALSE
 
 #ifdef WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
@@ -125,6 +125,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define SPAN_PENDING_CHANS_QUEUE_SIZE 1000
+#define SPAN_PENDING_SIGNALS_QUEUE_SIZE 1000
 
 #define GOTO_STATUS(label,st) status = st; goto label ;
 
@@ -214,11 +217,32 @@ extern "C" {
 			ftdm_mutex_lock(obj->mutex);					\
 		}									\
 		if(!__safety) {								\
-			ftdm_log(FTDM_LOG_CRIT, "flag %d was never cleared\n", flag);	\
+			ftdm_log(FTDM_LOG_CRIT, "flag %"FTDM_UINT64_FMT" was never cleared\n", (uint64_t)flag);	\
 		}									\
 	} while(0);
 
 #define ftdm_is_dtmf(key)  ((key > 47 && key < 58) || (key > 64 && key < 69) || (key > 96 && key < 101) || key == 35 || key == 42 || key == 87 || key == 119)
+
+#ifdef __linux__
+#define ftdm_print_stack(level) \
+	do { \
+		void *__stacktrace[100] = { 0 }; \
+		char **__symbols = NULL; \
+		int __size = 0; \
+		int __i = 0; \
+		__size = backtrace(__stacktrace, ftdm_array_len(__stacktrace)); \
+		__symbols = backtrace_symbols(__stacktrace, __size); \
+		if (__symbols) { \
+			for (__i = 0; __i < __size; __i++) { \
+				ftdm_log(__level, "%s\n", __symbols[i]); \
+			} \
+		free(__symbols); \
+		} \
+	} while (0);
+#else
+#define ftdm_print_stack(level) ftdm_log(level, "FTDM_PRINT_STACK is not implemented in this operating system!\n");
+#endif
+
 
 #define FTDM_SPAN_IS_BRI(x)	((x)->trunk_type == FTDM_TRUNK_BRI || (x)->trunk_type == FTDM_TRUNK_BRI_PTMP)
 /*!
@@ -452,6 +476,7 @@ struct ftdm_channel {
 	int32_t txdrops;
 	int32_t rxdrops;
 	ftdm_usrmsg_t *usrmsg;
+	ftdm_time_t last_state_change_time;
 };
 
 struct ftdm_span {
@@ -464,6 +489,7 @@ struct ftdm_span {
 	fio_event_cb_t event_callback;
 	ftdm_mutex_t *mutex;
 	ftdm_trunk_type_t trunk_type;
+	ftdm_trunk_mode_t trunk_mode;
 	ftdm_analog_start_type_t start_type;
 	ftdm_signal_type_t signal_type;
 	uint32_t last_used_index;
@@ -668,12 +694,15 @@ FT_DECLARE(ftdm_status_t) ftdm_sigmsg_remove_var(ftdm_sigmsg_t *sigmsg, const ch
  */
 FT_DECLARE(ftdm_status_t) ftdm_sigmsg_set_raw_data(ftdm_sigmsg_t *sigmsg, void *data, ftdm_size_t datalen);
 
+/*! \brief Retrieve a span and channel data structure from a string in the format 'span_id:chan_id'*/
+FT_DECLARE(ftdm_status_t) ftdm_get_channel_from_string(const char *string_id, ftdm_span_t **out_span, ftdm_channel_t **out_channel);
+
 /*!
   \brief Assert condition
 */
 #define ftdm_assert(assertion, msg) \
 	if (!(assertion)) { \
-		ftdm_log(FTDM_LOG_CRIT, msg); \
+		ftdm_log(FTDM_LOG_CRIT, "%s", msg); \
 		if (g_ftdm_crash_policy & FTDM_CRASH_ON_ASSERT) { \
 			ftdm_abort();  \
 		} \
@@ -684,7 +713,7 @@ FT_DECLARE(ftdm_status_t) ftdm_sigmsg_set_raw_data(ftdm_sigmsg_t *sigmsg, void *
 */
 #define ftdm_assert_return(assertion, retval, msg) \
 	if (!(assertion)) { \
-		ftdm_log(FTDM_LOG_CRIT, msg); \
+		ftdm_log(FTDM_LOG_CRIT, "%s", msg); \
 		if (g_ftdm_crash_policy & FTDM_CRASH_ON_ASSERT) { \
 			ftdm_abort();  \
 		} else { \

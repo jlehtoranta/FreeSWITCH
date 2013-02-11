@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, Anthony Minessale II
+ * Copyright (c) 2007-2012, Anthony Minessale II
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -221,6 +221,7 @@ typedef enum {
 #include <winsock2.h>
 #include <windows.h>
 typedef SOCKET esl_socket_t;
+#if !defined(_STDINT) && !defined(uint32_t)
 typedef unsigned __int64 uint64_t;
 typedef unsigned __int32 uint32_t;
 typedef unsigned __int16 uint16_t;
@@ -229,6 +230,7 @@ typedef __int64 int64_t;
 typedef __int32 int32_t;
 typedef __int16 int16_t;
 typedef __int8 int8_t;
+#endif
 typedef intptr_t esl_ssize_t;
 typedef int esl_filehandle_t;
 #define ESL_SOCK_INVALID INVALID_SOCKET
@@ -286,7 +288,7 @@ typedef enum {
 /*! \brief A handle that will hold the socket information and
            different events received. */
 typedef struct {
-	struct sockaddr_in sockaddr;
+	struct sockaddr_storage sockaddr;
 	struct hostent hostent;
 	char hostbuf[256];
 	esl_socket_t sock;
@@ -391,7 +393,9 @@ ESL_DECLARE(esl_status_t) esl_attach_handle(esl_handle_t *handle, esl_socket_t s
     \param port Port to bind to
     \param callback Callback that will be called upon data received
 */
-ESL_DECLARE(esl_status_t) esl_listen(const char *host, esl_port_t port, esl_listen_callback_t callback, int max);
+
+ESL_DECLARE(esl_status_t) esl_listen(const char *host, esl_port_t port, esl_listen_callback_t callback);
+ESL_DECLARE(esl_status_t) esl_listen_threaded(const char *host, esl_port_t port, esl_listen_callback_t callback, int max);
 /*!
     \brief Executes application with sendmsg to a specific UUID. Used for outbound socket.
     \param handle Handle that the msg will be sent

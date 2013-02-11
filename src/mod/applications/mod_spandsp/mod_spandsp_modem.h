@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -120,6 +120,7 @@ typedef enum {
 
 struct modem {
 	t31_state_t *t31_state;
+	t38_core_state_t *t38_core;
 	char digits[512];
 	modem_flags flags;
 #ifndef WIN32
@@ -155,3 +156,14 @@ switch_status_t modem_global_init(switch_loadable_module_interface_t **module_in
 void modem_global_shutdown(void);
 
 #endif //_MOD_SPANDSP_MODEM_H
+
+/* For Emacs:
+ * Local Variables:
+ * mode:c
+ * indent-tabs-mode:nil
+ * tab-width:4
+ * c-basic-offset:4
+ * End:
+ * For VIM:
+ * vim:set softtabstop=4 shiftwidth=4 tabstop=4:
+ */

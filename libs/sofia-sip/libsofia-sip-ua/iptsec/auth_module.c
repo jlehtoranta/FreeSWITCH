@@ -535,8 +535,6 @@ void auth_method_basic(auth_mod_t *am,
     if (!au->au_params)
       continue;
     n = base64_d(userpass, upsize - 1, au->au_params[0]);
-    if (n < 0 || n >= INT_MAX)
-      continue;
     if (n >= upsize) {
       void *b = realloc(userpass == buffer ? NULL : userpass, upsize = n + 1);
       if (b == NULL)
@@ -746,7 +744,7 @@ void auth_check_digest(auth_mod_t *am,
       auth_challenge_digest(am, as, ach);
       as->as_blacklist = am->am_blacklist;
     }
-    SU_DEBUG_5(("auth_method_digest: response did not match\n"));
+    SU_DEBUG_5(("auth_method_digest: response did not match\n" VA_NONE));
 
     return;
   }
@@ -763,7 +761,7 @@ void auth_check_digest(auth_mod_t *am,
   if (am->am_challenge)
     auth_challenge_digest(am, as, ach);
 
-  SU_DEBUG_7(("auth_method_digest: successful authentication\n"));
+  SU_DEBUG_7(("auth_method_digest: successful authentication\n" VA_NONE));
 
   as->as_status = 0;	/* Successful authentication! */
   as->as_phrase = "";
@@ -963,6 +961,7 @@ int auth_readdb_internal(auth_mod_t *am, int always)
   FILE *f;
   char *data, *s;
   size_t len, i, n, N;
+  ssize_t slen;
   auth_passwd_t *apw;
 
   if (!am->am_stat)
@@ -1004,7 +1003,7 @@ int auth_readdb_internal(auth_mod_t *am, int always)
     if (am->am_stat)
       stat(am->am_db, am->am_stat); /* too bad if this fails */
 
-    len = readfile(am->am_home, f, &buffer, 1);
+    slen = readfile(am->am_home, f, &buffer, 1);
 
 #if HAVE_FLOCK
     /* Release shared lock on the database file */
@@ -1018,8 +1017,9 @@ int auth_readdb_internal(auth_mod_t *am, int always)
 
     fclose(f);
 
-    if (len < 0)
+    if (slen < 0)
       return -1;
+    len = (size_t)slen;
 
     /* Count number of entries in new buffer */
     for (i = am->am_anonymous, s = data = buffer;
@@ -1210,7 +1210,7 @@ ssize_t readfile(su_home_t *home,
   buffer[len] = '\0';
   *contents = buffer;
 
-  return len;
+  return (ssize_t)len;
 }
 
 /* ====================================================================== */
@@ -1412,11 +1412,11 @@ int auth_validate_digest_nonce(auth_mod_t *am,
 
   /* Check nonce */
   if (!ar->ar_nonce) {
-    SU_DEBUG_5(("auth_method_digest: no nonce\n"));
+    SU_DEBUG_5(("auth_method_digest: no nonce\n" VA_NONE));
     return -1;
   }
   if (base64_d((void*)nonce, (sizeof nonce), ar->ar_nonce) != (sizeof nonce)) {
-    SU_DEBUG_5(("auth_method_digest: too short nonce\n"));
+    SU_DEBUG_5(("auth_method_digest: too short nonce\n" VA_NONE));
     return -1;
   }
 
@@ -1426,7 +1426,7 @@ int auth_validate_digest_nonce(auth_mod_t *am,
   auth_md5_hmac_digest(am, md5, hmac, sizeof hmac);
 
   if (memcmp(nonce->digest, hmac, sizeof nonce->digest)) {
-    SU_DEBUG_5(("auth_method_digest: bad nonce\n"));
+    SU_DEBUG_5(("auth_method_digest: bad nonce\n" VA_NONE));
     return -1;
   }
 

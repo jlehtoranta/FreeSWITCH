@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -128,7 +128,12 @@ SWITCH_LIMIT_INCR(limit_incr_redis)
        				switch_goto_status(SWITCH_STATUS_FALSE, end);
 				}
 			}	
-		}	
+		} else  {
+			if (credis_incr(redis, uuid_rediskey, &uuid_val) != 0) {
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Couldn't increment value corresponding to %s\n", uuid_rediskey);
+			switch_goto_status(SWITCH_STATUS_FALSE, end);
+			}
+		}
     }
 /*
 	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG10, "Limit incr redis : rediskey : %s val : %d max : %d\n", rediskey, val, max);

@@ -1,6 +1,6 @@
 /* 
  * libteletone
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -91,6 +91,7 @@ extern "C" {
 #define __inline__ __inline
 #endif
 
+#if !defined(_STDINT) && !defined(uint32_t)
 typedef unsigned __int64 uint64_t;
 typedef unsigned __int32 uint32_t;
 typedef unsigned __int16 uint16_t;
@@ -99,6 +100,7 @@ typedef __int64 int64_t;
 typedef __int32 int32_t;
 typedef __int16 int16_t;
 typedef __int8 int8_t;
+#endif
 #else
 #include <stdint.h>
 #endif
@@ -107,7 +109,14 @@ typedef __int8 int8_t;
 #include <fcntl.h>
 #include <math.h>
 #if !defined(powf) && !defined(_WIN64)
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 28251)
+#endif
 extern float powf (float, float);
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 #endif
 #include <string.h>
 #include <errno.h>

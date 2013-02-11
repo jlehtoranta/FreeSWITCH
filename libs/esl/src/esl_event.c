@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, Anthony Minessale II
+ * Copyright (c) 2007-2012, Anthony Minessale II
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -127,6 +127,7 @@ static const char *EVENT_NAMES[] = {
 	"SERVER_DISCONNECTED",
 	"SEND_INFO",
 	"RECV_INFO",
+	"RECV_RTCP_MESSAGE",
 	"CALL_SECURE",
 	"NAT",
 	"RECORD_START",
@@ -137,7 +138,11 @@ static const char *EVENT_NAMES[] = {
 	"FAILURE",
 	"SOCKET_DATA",
 	"MEDIA_BUG_START",
-	"MEDIA_BUG_START",
+	"MEDIA_BUG_STOP",
+	"CONFERENCE_DATA_QUERY",
+	"CONFERENCE_DATA",
+	"CALL_SETUP_REQ",
+	"CALL_SETUP_RESULT",
 	"ALL"
 };
 
@@ -547,7 +552,12 @@ static esl_status_t esl_event_base_add_header(esl_event_t *event, esl_stack_t st
 			esl_assert(hv);
 			header->value = hv;
 
-			esl_snprintf(header->value, len, "ARRAY::");
+			if (header->idx > 1) {
+				esl_snprintf(header->value, len, "ARRAY::");
+			} else {
+				*header->value = '\0';
+			}
+
 			for(j = 0; j < header->idx; j++) {
 				esl_snprintf(header->value + strlen(header->value), len - strlen(header->value), "%s%s", j == 0 ? "" : "|:", header->array[j]);
 			}

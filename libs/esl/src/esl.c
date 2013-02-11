@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, Anthony Minessale II
+ * Copyright (c) 2007-2012, Anthony Minessale II
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@
 
 #include <esl.h>
 #ifndef WIN32
-#define closesocket(x) close(x)
+#define closesocket(x) shutdown(x, 2); close(x)
 #include <fcntl.h>
 #include <errno.h>
 #else
@@ -491,7 +491,9 @@ ESL_DECLARE(esl_status_t) esl_attach_handle(esl_handle_t *handle, esl_socket_t s
 ESL_DECLARE(esl_status_t) esl_sendevent(esl_handle_t *handle, esl_event_t *event)
 {
 	char *txt;
-	char event_buf[256] = "";
+	char *event_buf = NULL;
+	esl_status_t status = ESL_FAIL;
+	size_t len = 0;
 
 	if (!handle->connected || !event) {
 		return ESL_FAIL;
@@ -500,23 +502,25 @@ ESL_DECLARE(esl_status_t) esl_sendevent(esl_handle_t *handle, esl_event_t *event
 	esl_event_serialize(event, &txt, ESL_FALSE);
 
 	esl_log(ESL_LOG_DEBUG, "SEND EVENT\n%s\n", txt);
-		
-	snprintf(event_buf, sizeof(event_buf), "sendevent %s\n", esl_event_name(event->event_id));
 	
-	if (send(handle->sock, event_buf, strlen(event_buf), 0) <= 0) goto fail;
-	if (send(handle->sock, txt, strlen(txt), 0) <= 0) goto fail;
+	len = strlen(txt) + 100;
+	event_buf = malloc(len);
+	assert(event_buf);
+
+	if (!event_buf) {
+		return ESL_FAIL;
+	}
+
+	memset(event_buf, 0, len);
 	
-	free(txt);
-
-	return esl_recv(handle);
-
- fail:
-
-	handle->connected = 0;
+	snprintf(event_buf, len, "sendevent %s\n%s", esl_event_name(event->event_id), txt);
+	
+	status = esl_send_recv(handle, event_buf);
 
 	free(txt);
+	free(event_buf);
 
-	return ESL_FAIL;
+	return status;
 
 }
 
@@ -554,34 +558,40 @@ ESL_DECLARE(esl_status_t) esl_execute(esl_handle_t *handle, const char *app, con
 
 ESL_DECLARE(esl_status_t) esl_sendmsg(esl_handle_t *handle, esl_event_t *event, const char *uuid)
 {
-	char cmd_buf[128] = "sendmsg\n";
+	char *cmd_buf = NULL;
 	char *txt;
-	
+	size_t len = 0;
+	esl_status_t status = ESL_FAIL;
+
     if (!handle || !handle->connected || handle->sock == ESL_SOCK_INVALID) {
         return ESL_FAIL;
     }
 
+	esl_event_serialize(event, &txt, ESL_FALSE);
+	len = strlen(txt) + 100;
+	cmd_buf = malloc(len);
+	assert(cmd_buf);
+
+	if (!cmd_buf) {
+		return ESL_FAIL;
+	}
+
+	memset(cmd_buf, 0, len);	
+
 	if (uuid) {
-		snprintf(cmd_buf, sizeof(cmd_buf), "sendmsg %s\n", uuid);
+		snprintf(cmd_buf, len, "sendmsg %s\n%s", uuid, txt);
+	} else {
+		snprintf(cmd_buf, len, "sendmsg\n%s", txt);
 	}
 	
-	esl_event_serialize(event, &txt, ESL_FALSE);
 	esl_log(ESL_LOG_DEBUG, "%s%s\n", cmd_buf, txt);
 
-	if (send(handle->sock, cmd_buf, strlen(cmd_buf), 0) <= 0) goto fail;
-	if (send(handle->sock, txt, strlen(txt), 0) <= 0) goto fail;
-	
-	free(txt);
-
-	return esl_recv(handle);
-
- fail:
-
-	handle->connected = 0;
+	status = esl_send_recv(handle, cmd_buf);
 
 	free(txt);
+	free(cmd_buf);
 
-	return ESL_FAIL;
+	return status;
 }
 
 
@@ -648,7 +658,64 @@ static void *client_thread(esl_thread_t *me, void *obj)
 
 }
 
-ESL_DECLARE(esl_status_t) esl_listen(const char *host, esl_port_t port, esl_listen_callback_t callback, int max)
+ESL_DECLARE(esl_status_t) esl_listen(const char *host, esl_port_t port, esl_listen_callback_t callback)
+{
+	esl_socket_t server_sock = ESL_SOCK_INVALID;
+	struct sockaddr_in addr;
+	esl_status_t status = ESL_SUCCESS;
+	
+	if ((server_sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+		return ESL_FAIL;
+	}
+
+	esl_socket_reuseaddr(server_sock);
+		   
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons(port);
+	
+    if (bind(server_sock, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+		status = ESL_FAIL;
+		goto end;
+	}
+
+    if (listen(server_sock, 10000) < 0) {
+		status = ESL_FAIL;
+		goto end;
+	}
+
+	for (;;) {
+		int client_sock;                    
+		struct sockaddr_in echoClntAddr;
+#ifdef WIN32
+		int clntLen;
+#else
+		unsigned int clntLen;
+#endif
+
+		clntLen = sizeof(echoClntAddr);
+    
+		if ((client_sock = accept(server_sock, (struct sockaddr *) &echoClntAddr, &clntLen)) == ESL_SOCK_INVALID) {
+			status = ESL_FAIL;
+			goto end;
+		}
+		
+		callback(server_sock, client_sock, &echoClntAddr);
+	}
+
+ end:
+
+	if (server_sock != ESL_SOCK_INVALID) {
+		closesocket(server_sock);
+		server_sock = ESL_SOCK_INVALID;
+	}
+
+	return status;
+
+}
+
+ESL_DECLARE(esl_status_t) esl_listen_threaded(const char *host, esl_port_t port, esl_listen_callback_t callback, int max)
 {
 	esl_socket_t server_sock = ESL_SOCK_INVALID;
 	struct sockaddr_in addr;
@@ -859,6 +926,9 @@ ESL_DECLARE(esl_status_t) esl_connect_timeout(esl_handle_t *handle, const char *
 	int rval = 0;
 	const char *hval;
 	struct addrinfo hints = { 0 }, *result;
+	struct sockaddr_in *sockaddr_in;
+	struct sockaddr_in6 *sockaddr_in6;
+	socklen_t socklen;
 #ifndef WIN32
 	int fd_flags = 0;
 #else
@@ -879,27 +949,38 @@ ESL_DECLARE(esl_status_t) esl_connect_timeout(esl_handle_t *handle, const char *
 	if (!handle->packet_buf) {
 		esl_buffer_create(&handle->packet_buf, BUF_CHUNK, BUF_START, 0);
 	}
-	
-	handle->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-	
-	if (handle->sock == ESL_SOCK_INVALID) {
-		snprintf(handle->err, sizeof(handle->err), "Socket Error");
-		return ESL_FAIL;
-	}
 
-
-	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
-	
+
 	if (getaddrinfo(host, NULL, &hints, &result)) {
 		strncpy(handle->err, "Cannot resolve host", sizeof(handle->err));
 		goto fail;
 	}
 
 	memcpy(&handle->sockaddr, result->ai_addr, sizeof(handle->sockaddr));	
-	handle->sockaddr.sin_family = AF_INET;
-	handle->sockaddr.sin_port = htons(port);
+        switch(handle->sockaddr.ss_family) {
+		case AF_INET:
+			sockaddr_in = (struct sockaddr_in*)&(handle->sockaddr);
+			sockaddr_in->sin_port = htons(port);
+			socklen = sizeof(struct sockaddr_in);
+			break;
+		case AF_INET6:
+			sockaddr_in6 = (struct sockaddr_in6*)&(handle->sockaddr);
+			sockaddr_in6->sin6_port = htons(port);
+			socklen = sizeof(struct sockaddr_in6);
+			break;
+		default:
+			strncpy(handle->err, "Host resolves to unsupported address family", sizeof(handle->err));
+			goto fail;
+	}
 	freeaddrinfo(result);
+	
+	handle->sock = socket(handle->sockaddr.ss_family, SOCK_STREAM, IPPROTO_TCP);
+	
+	if (handle->sock == ESL_SOCK_INVALID) {
+		snprintf(handle->err, sizeof(handle->err), "Socket Error");
+		return ESL_FAIL;
+	}
 
 	if (timeout) {
 #ifdef WIN32
@@ -917,7 +998,7 @@ ESL_DECLARE(esl_status_t) esl_connect_timeout(esl_handle_t *handle, const char *
 #endif
 	}
 
-	rval = connect(handle->sock, (struct sockaddr*)&handle->sockaddr, sizeof(handle->sockaddr));
+	rval = connect(handle->sock, (struct sockaddr*)&handle->sockaddr, socklen);
 	
 	if (timeout) {
 		int r;

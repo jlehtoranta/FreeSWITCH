@@ -54,10 +54,6 @@
 #include <libxml/xinclude.h>
 #endif
 
-//#if defined(WITH_SPANDSP_INTERNALS)
-#define SPANDSP_EXPOSE_INTERNAL_STRUCTURES
-//#endif
-
 #include "spandsp.h"
 #include "spandsp-sim.h"
 
@@ -177,7 +173,7 @@ static int parse_tone(super_tone_tx_step_t **tree, xmlDocPtr doc, xmlNsPtr ns, x
         cur = cur->next;
     }
     /*endwhile*/
-    return  0;
+    return 0;
 }
 /*- End of function --------------------------------------------------------*/
 

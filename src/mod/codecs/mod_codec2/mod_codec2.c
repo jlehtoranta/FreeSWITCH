@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2011, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -35,6 +35,8 @@
 #define LOG_DATA 
 #define CODEC2_DEBUG
 */
+
+#define CODEC2_SAMPLES_PER_FRAME 160
 
 #ifdef CODEC2_DEBUG
 #define codec2_assert(_x) switch_assert(_x)
@@ -80,11 +82,11 @@ static switch_status_t switch_codec2_init(switch_codec_t *codec, switch_codec_fl
 	}
 	
 	if (encoding) {
-		context->encoder = codec2_create();		
+		context->encoder = codec2_create(CODEC2_MODE_2400);		
 	}
 	
 	if (decoding) {
-		context->decoder = codec2_create();
+		context->decoder = codec2_create(CODEC2_MODE_2400);
 	}
 
 	codec->private_info = context;
